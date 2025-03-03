@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -9,38 +10,43 @@ namespace Jerbo.Tools
 {
     public class DevConsole : MonoBehaviour
     {
-        // [RuntimeInitializeOnLoadMethod]
-        // public static void Init()
-        // {
-        //     Instance = new DevConsole();
-        // }
-        //
-        // static DevConsole Instance;
+        [RuntimeInitializeOnLoadMethod]
+        public static void Init() {
+            GameObject consoleContainer = new ("- Dev Console -");
+            consoleContainer.AddComponent<DevConsole>();
+        }
 
-        [SerializeField] GUISkin consoleSkin;
-        string consoleInput = "";
-        bool shouldFocusTextbox;
+        
         const string CONSOLE_INPUT_FIELD = "Console Input Field";
+        const char TOGGLE_CONSOLE_KEY = '§';
+        const float SCREEN_HEIGHT_PERCENTAGE = 0.05f;
+        const float INPUT_BORDER_SIZE = 2f;
+        const float WIDTH_SPACING = 8f;
+        const float HEIGHT_SPACING = 8f;
         
+        readonly List<ConsoleCommand> commands = new(100);
+        readonly List<ConsoleCommand> staticCommands = new(100);
+        GUISkin consoleSkin;
+        string consoleInputString;
+        int selected;
+        bool isVisible;
+
+
+
         
-        List<ConsoleCommand> commands = new();
-        void Start()
-        {
+        void Start() {
+            consoleSkin = Resources.Load<GUISkin>("Dev Console Skin");
             const BindingFlags BINDING_FLAGS = BindingFlags.Default | BindingFlags.Instance | BindingFlags.Static |
-                                       BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.GetField |
-                                       BindingFlags.GetProperty | BindingFlags.InvokeMethod;
+                                       BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.InvokeMethod;
             
             Type[] assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
-            Type commandAttribute = typeof(AddCommandAttribute);
+            Type commandAttribute = typeof(DevCommand);
             
             
             List<MemberInfo> memberInfoCollection = new (24);
             foreach (Type loadedType in assemblyTypes)
             {
-                memberInfoCollection.AddRange(loadedType.GetFields(BINDING_FLAGS).Where(info => Attribute.IsDefined(info, commandAttribute)));
-                memberInfoCollection.AddRange(loadedType.GetProperties(BINDING_FLAGS).Where(info => Attribute.IsDefined(info, commandAttribute)));
                 memberInfoCollection.AddRange(loadedType.GetMethods(BINDING_FLAGS).Where(info => Attribute.IsDefined(info, commandAttribute)));
-                memberInfoCollection.AddRange(loadedType.GetEvents(BINDING_FLAGS).Where(info => Attribute.IsDefined(info, commandAttribute)));
 
                 foreach (MemberInfo info in memberInfoCollection)
                 {
@@ -50,54 +56,84 @@ namespace Jerbo.Tools
             }
         }
 
-        int selected = 0;
         
         void DrawConsole()
         {
-            GUI.skin = consoleSkin;
-            Rect inputWindowRect = new Rect(24, Screen.height / 2f - 16, Screen.width - 48, 32);
-            bool stopEditingTextfield = DevInput.ExitConsole();
-            
-            
-            GUI.SetNextControlName(CONSOLE_INPUT_FIELD);
-            consoleInput = GUI.TextField(inputWindowRect, consoleInput);
-            
-            if (shouldFocusTextbox == false && consoleInput.Length > 0 && consoleInput[^1] == '§')
-            {
-                consoleInput = consoleInput.Remove(consoleInput.Length - 1, 1);
-                isVisible = false;
+            if (isVisible == false && GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD) {
                 GUI.FocusControl(null);
                 return;
             }
+            float width = Screen.width;
+            float height = Screen.height;
 
-            if (shouldFocusTextbox)
-            {
-                shouldFocusTextbox = false;
-                GUI.FocusControl(CONSOLE_INPUT_FIELD);
+            consoleSkin.textField.fontSize = Mathf.RoundToInt(height * SCREEN_HEIGHT_PERCENTAGE - INPUT_BORDER_SIZE * 2);
+            GUI.skin = consoleSkin;
+            
+            
+            /*
+             * draw console input area
+             */
+
+            Rect inputWindowRect = new (
+                WIDTH_SPACING, height - (HEIGHT_SPACING + height * SCREEN_HEIGHT_PERCENTAGE), 
+                width - WIDTH_SPACING * 2f, height * SCREEN_HEIGHT_PERCENTAGE);
+            
+            
+            GUI.SetNextControlName(CONSOLE_INPUT_FIELD);
+            string newInputString = GUI.TextField(inputWindowRect, consoleInputString);
+            GUI.FocusControl(CONSOLE_INPUT_FIELD);
+            TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
+            text.MoveTextEnd();
+
+            
+            bool hasUpdatedString = false;
+            if (newInputString != consoleInputString) {
+                consoleInputString = newInputString;
+                hasUpdatedString = true;
+            }
+            bool hasInputText = consoleInputString.Length > 0;
+            
+            
+            /*
+             * handle core console inputs, on/off etc
+             */
+            
+            // Closes console
+            if (hasInputText && consoleInputString[^1] == TOGGLE_CONSOLE_KEY) {
+                isVisible = false;
+                return;
             }
             
-            if (stopEditingTextfield && GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD)
-            {
-                GUI.FocusControl(null);
-            }
+            
+            
+            
 
+            
+            /*
+             * if we are typing, show matching commands
+             *
+             * highlight index 0 of hints
+             * press arrows to navigate
+             * 
+             * fuzzy search for best match
+             */
 
-            if (consoleInput.Length > 0)
-            {
+            if (hasInputText) {
                 selected += DevInput.NavigateVertical();
                 selected = Mathf.Clamp(selected,0, commands.Count - 1);
                 
+                
                 string possibleCommands = "";
-                for (int i = commands.Count - 1; i >= 0; i--)
-                {
-                    if (selected == i)
-                    {
+                for (int i = commands.Count - 1; i >= 0; i--) {
+                    if (selected == i) {
                         possibleCommands += "> ";
                     }
                     possibleCommands += commands[i].GetCommandInfo();
                     if (i < commands.Count - 1) possibleCommands += "\n";
                 }
-
+                
+                
+                
                 GUIContent helpContent = new (possibleCommands);
                 Vector2 size = consoleSkin.textArea.CalcSize(helpContent);
                 Rect helpRect = new (inputWindowRect);
@@ -107,26 +143,39 @@ namespace Jerbo.Tools
                 GUI.enabled = false;
                 GUI.TextArea(helpRect, possibleCommands);
                 GUI.enabled = true;
+                
+            }
+            else {
+                selected = 0;
             }
             
             
-            GUI.FocusControl(CONSOLE_INPUT_FIELD);
+            
+            
         }
         
         
-        bool isVisible;
+        
+        
+
+        void ResetConsoleVariables() {
+            consoleInputString = string.Empty;
+            selected = 0;
+        }
 
         void OnGUI()
         {
             if (isVisible) DrawConsole();
         }
 
-        void Update()
-        {
+        void Update() {
+            
             if (DevInput.ToggleConsole())
             {
                 isVisible = !isVisible;
-                shouldFocusTextbox = isVisible;
+                if (isVisible) {
+                    ResetConsoleVariables();
+                }
             }
 
             
@@ -203,105 +252,40 @@ namespace Jerbo.Tools
 
             internal string GetCommandInfo()
             {
-                string description = $"{info.Name} -> {info.GetType()}";
+                string description = $"{info.Name}";
 
-                // switch (info)
-                // {
-                //     case FieldInfo fieldInfo:
-                //         description += $" (Field, Type: {fieldInfo.FieldType.FullName})";
-                //         break;
-                //
-                //     case MethodInfo methodInfo:
-                //         var methodParams = methodInfo.GetParameters()
-                //             .Select(p => $"{p.ParameterType.FullName} {p.Name}");
-                //         description += $" (Method, Return Type: {methodInfo.ReturnType.FullName}, Parameters: {string.Join(", ", methodParams)})";
-                //         break;
-                //
-                //     case PropertyInfo propertyInfo:
-                //         description += $" (Property, Type: {propertyInfo.PropertyType.Name})";
-                //         break;
-                //
-                //     case EventInfo eventInfo:
-                //         var handlerType = eventInfo.EventHandlerType;
-                //         var invokeMethod = handlerType?.GetMethod("Invoke");
-                //         var eventParams = invokeMethod?.GetParameters()
-                //             .Select(p => $"{p.ParameterType.FullName} {p.Name}") ?? Enumerable.Empty<string>();
-                //         description += $" (Event, Handler Type: {handlerType?.FullName}, Parameters: {string.Join(", ", eventParams)})";
-                //         break;
-                //
-                //     default:
-                //         description += " (Unknown Member Type)";
-                //         break;
-                // }
+                switch (info)
+                {
+                    case FieldInfo fieldInfo:
+                        description += $" (Field, Type: {fieldInfo.FieldType.FullName})";
+                        break;
+                
+                    case MethodInfo methodInfo:
+                        var methodParams = methodInfo.GetParameters()
+                            .Select(p => $"{p.ParameterType.FullName} {p.Name}");
+                        description += $" (Method, Return Type: {methodInfo.ReturnType.FullName}, Parameters: {string.Join(", ", methodParams)})";
+                        break;
+                
+                    case PropertyInfo propertyInfo:
+                        description += $" (Property, Type: {propertyInfo.PropertyType.Name})";
+                        break;
+                
+                    case EventInfo eventInfo:
+                        var handlerType = eventInfo.EventHandlerType;
+                        var invokeMethod = handlerType?.GetMethod("Invoke");
+                        var eventParams = invokeMethod?.GetParameters()
+                            .Select(p => $"{p.ParameterType.FullName} {p.Name}") ?? Enumerable.Empty<string>();
+                        description += $" (Event, Handler Type: {handlerType?.FullName}, Parameters: {string.Join(", ", eventParams)})";
+                        break;
+                
+                    default:
+                        description += " (Unknown Member Type)";
+                        break;
+                }
 
                 return description;
             }
         }
         
     }
-
-    public static class DevInput
-    {
-
-        
-#if ENABLE_LEGACY_INPUT_MANAGER
-        
-        static KeyCode toggleConsoleKey = KeyCode.BackQuote;
-        static KeyCode navigateUp = KeyCode.UpArrow;
-        static KeyCode navigateDown = KeyCode.DownArrow;
-        static KeyCode exitKey = KeyCode.Escape;
-        
-        public static bool ToggleConsole() {
-            return Input.GetKeyDown(toggleConsoleKey);
-        }
-
-        public static int NavigateVertical() {
-            if (Input.GetKeyDown(navigateUp)) {
-                return 1;
-            }
-            if (Input.GetKeyDown(navigateDown)) {
-                return -1;
-            }
-
-            return 0;
-        }
-
-        public static bool ExitConsole() {
-            return Input.GetKeyDown(exitKey);
-        }
-#elif ENABLE_INPUT_SYSTEM
-        
-        static DevConsoleInputs consoleActions = new();
-        
-        static void ValidateInputIsEnabled() {
-            if (consoleActions.DevConsole.enabled == false)
-                consoleActions.DevConsole.Enable(); 
-        }
-        
-        public static bool ToggleConsole() {
-            ValidateInputIsEnabled();
-            return consoleActions.DevConsole.ToggleConsole.WasPerformedThisFrame();
-        }
-
-        public static int NavigateVertical() {
-            ValidateInputIsEnabled();
-            if (consoleActions.DevConsole.NavigateUp.WasPerformedThisFrame()) {
-                return 1;
-            }
-            if (consoleActions.DevConsole.NavigateDown.WasPerformedThisFrame()) {
-                return -1;
-            }
-
-            return 0;
-        }
-        
-#endif
-        
-    }
-}
-
-[AttributeUsage(AttributeTargets.All)]
-public class AddCommandAttribute : Attribute
-{
-    
 }
