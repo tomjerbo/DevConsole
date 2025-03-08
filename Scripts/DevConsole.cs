@@ -27,6 +27,7 @@ namespace Jerbo.Tools
         GUISkin consoleSkin;
         string consoleInputString = string.Empty;
         int selected;
+        int moveToEnd;
         bool isActive;
         int setFocus;
 
@@ -74,9 +75,8 @@ namespace Jerbo.Tools
             
             GUISkin skin = GUI.skin;
             GUI.skin = consoleSkin;
-            GUI.backgroundColor = Color.red;
+            GUI.backgroundColor = Color.grey;
         
-            DrawHintWindow();
             DrawConsole();
         
             GUI.skin = skin;
@@ -100,7 +100,65 @@ namespace Jerbo.Tools
         void DrawConsole() {
             float width = Screen.width;
             float height = Screen.height;
+            Event e = Event.current;
+            bool hasInputText = consoleInputString.Length > 0;
             
+            
+            /*
+            * Fuzzy search for matching commands
+            */
+            
+            List<ConsoleCommand> matchingCommands = new ();
+            if (hasInputText) {
+                string[] slicedInputString = consoleInputString.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach (ConsoleCommand cmd in commands) {
+                    bool matchesAll = true;
+                    foreach (string inputSlice in slicedInputString) {
+                        if (cmd.GetCommandName().Contains(inputSlice, StringComparison.OrdinalIgnoreCase) == false) {
+                            matchesAll = false;
+                            break;
+                        }
+                    }
+                    if (matchesAll) matchingCommands.Add(cmd);
+                }
+            }
+            
+
+            
+            /*
+             * Hint menu navigation
+             */
+
+            if (hasInputText == false || matchingCommands.Count == 0) {
+                selected = -1;
+            }
+            
+            if (GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD) {
+                if (selected != -1) {
+                    selected = Mathf.Clamp(selected, 0, matchingCommands.Count - 1);
+
+                    if (e.KeyDown(KeyCode.KeypadEnter) || e.KeyDown(KeyCode.Return) || e.KeyDown(KeyCode.Tab)) {
+                        consoleInputString = matchingCommands[selected].GetCommandName() + " ";
+                        moveToEnd = 2;
+                    }
+                    
+                }
+                
+                if (e.KeyDown(KeyCode.DownArrow)) {
+                    selected -= 1;
+                    selected %= matchingCommands.Count;
+                }
+                else if (e.KeyDown(KeyCode.UpArrow)) {
+                    selected += 1;
+                    if (selected < 0) selected = matchingCommands.Count - 1;
+                }
+            }
+            
+            
+            
+            
+             
+                
             /*
              * draw console input area
              */
@@ -110,73 +168,52 @@ namespace Jerbo.Tools
             GUI.SetNextControlName(CONSOLE_INPUT_FIELD);
             Rect inputWindowRect = new (consoleInputDrawPos, consoleInputSize);
             consoleInputString = GUI.TextField(inputWindowRect, consoleInputString);
+            hasInputText = consoleInputString.Length > 0;
 
 
-            if (setFocus > 0) {
-                --setFocus;
-                GUI.FocusControl(CONSOLE_INPUT_FIELD);
-            }
-        }
-
-
-        void DrawHintWindow() {
-            bool hasInputText = consoleInputString.Length > 0;
-            if (hasInputText == false) {
-                selected = -1;
-                return;
-            }
-
-            
-            
-            // Search for matches
-            string[] slicedInputString = consoleInputString.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            List<ConsoleCommand> matchingCommands = new ();
-            foreach (ConsoleCommand cmd in commands) {
-                bool matchesAll = true;
-                foreach (string inputSlice in slicedInputString) {
-                    if (cmd.GetCommandName().Contains(inputSlice, StringComparison.OrdinalIgnoreCase) == false) {
-                        matchesAll = false;
-                        break;
-                    }
-                }
-                if (matchesAll) matchingCommands.Add(cmd);
-            }
-
-
-            if (matchingCommands.Count == 0) {
-                selected = -1;
-                return;
-            }
-            
             
             /*
              * Inputs regarding movement inside the hint window
              */
-            Event e = Event.current;
+            
+            bool shouldDrawHintWindow = hasInputText && matchingCommands.Count > 0;
+            if (shouldDrawHintWindow) {
+                DrawHintWindow(matchingCommands);
+            }
+            else {
+                selected = -1;
+            }
 
-            bool updatedSelection = false;
-            if (selected != -1) {
-                selected = Mathf.Clamp(selected, 0, matchingCommands.Count - 1);
+            
+ 
+            
+            
+            /*
+             * Set focus back to input field
+             */
+            
+            if (setFocus > 0) {
+                --setFocus;
+                GUI.FocusControl(CONSOLE_INPUT_FIELD);
             }
             
-            if (e.KeyDown(KeyCode.DownArrow)) {
-                selected -= 1;
-                selected %= matchingCommands.Count;
-                updatedSelection = true;
-                setFocus = 1;
-            }
-            else if (e.KeyDown(KeyCode.UpArrow)) {
-                selected += 1;
-                if (selected < 0) selected = matchingCommands.Count - 1;
-                updatedSelection = true;
-                setFocus = 1;
-            }
-            
-            if (updatedSelection) {
+            if (moveToEnd > 0) {
+                --moveToEnd;
                 TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
                 text.MoveTextEnd();
-                text.SelectNone();
+                // text.SelectNone();
             }
+            
+            GUI.enabled = true;
+        }
+
+
+
+        void DrawHintWindow(List<ConsoleCommand> matchingCommands) {
+            
+            /*
+             * Draw Command Hints
+             */
             
             float maximumWidth = 0;
             float maximumHeight = 0;
@@ -201,11 +238,7 @@ namespace Jerbo.Tools
                 GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), cmd.GetCommandName());
             }
             
-            
-            GUI.enabled = true;
         }
-
-
 
         
         
