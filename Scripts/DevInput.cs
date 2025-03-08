@@ -4,16 +4,33 @@ namespace Jerbo.Tools {
     public static class DevInput
     {
 
+        public static bool KeyUp(this Event e, KeyCode key, bool useOnTrue = true) {
+            if (e.isKey && e.keyCode == key && e.type == EventType.KeyUp) {
+                if (useOnTrue) e.Use();
+                return true;
+            }
+
+            return false;
+        }
+        
+        public static bool KeyDown(this Event e, KeyCode key, bool useOnTrue = true) {
+            if (e.isKey && e.keyCode == key && e.type == EventType.KeyDown) {
+                if (useOnTrue) e.Use();
+                return true;
+            }
+
+            return false;
+        }
         
 #if ENABLE_LEGACY_INPUT_MANAGER
         
-        static KeyCode toggleConsoleKey = KeyCode.BackQuote;
+        static KeyCode openKey = KeyCode.BackQuote;
+        static KeyCode exitKey = KeyCode.Escape;
         static KeyCode navigateUp = KeyCode.UpArrow;
         static KeyCode navigateDown = KeyCode.DownArrow;
-        static KeyCode exitKey = KeyCode.Escape;
         
-        public static bool ToggleConsole() {
-            return Input.GetKeyDown(toggleConsoleKey);
+        public static bool OpenConsole() {
+            return Input.GetKeyDown(openKey);
         }
 
         public static int NavigateVertical() {
@@ -27,7 +44,7 @@ namespace Jerbo.Tools {
             return 0;
         }
 
-        public static bool ExitConsole() {
+        public static bool CloseConsole() {
             return Input.GetKeyDown(exitKey);
         }
 #elif ENABLE_INPUT_SYSTEM
