@@ -2,6 +2,7 @@ using System;
 using Jerbo.Tools;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.SceneManagement;
 
 public class TestScript : MonoBehaviour
 {
@@ -27,5 +28,19 @@ public class TestScript : MonoBehaviour
         myEventAction += () => { Debug.Log("Event action called"); };
         myAction += () => { Debug.Log("Single Action called"); };
     }
-    
+
+
+    [DevCommand]
+    public static void StaticMethod_Public(int number) {
+        
+    }
+
+    [DevCommand]
+    static void StaticMethod_Private(bool isActive) {
+        
+    }
+
+    public void LoadScene(Scene scene) {
+        SceneManager.LoadScene(scene.name);
+    }
 }

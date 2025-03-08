@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
+using System.Text;
 using UnityEngine;
+using Object = System.Object;
 
 namespace Jerbo.Tools
 {
@@ -13,53 +14,156 @@ namespace Jerbo.Tools
             GameObject consoleContainer = new ("- Dev Console -");
             consoleContainer.AddComponent<DevConsole>();
         }
+        
+
+        /*
+         * Static
+         */
 
         
-        const string CONSOLE_INPUT_FIELD = "Console Input Field";
+        
+        
+        /*
+         * Const
+         */
+
+        const BindingFlags BASE_FLAGS = BindingFlags.Default | BindingFlags.Public | BindingFlags.NonPublic;
+        const BindingFlags INSTANCED_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Instance;
+        const BindingFlags STATIC_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Static;
+
+        
+        const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
         const float SCREEN_HEIGHT_PERCENTAGE = 0.05f;
         const float WIDTH_SPACING = 8f;
         const float HEIGHT_SPACING = 8f;
         const float HINT_HEIGHT_TEXT_PADDING = 2f;
+        const char SPACE = ' ';
 
         
-        readonly List<ConsoleCommand> commands = new(100);
-        readonly List<ConsoleCommand> staticCommands = new(100);
-        GUISkin consoleSkin;
+        
+        /*
+         * Instanced
+         */
+        
+
+        // Core
+        readonly CommandData[] commands = new CommandData[256];
+        Type[] assemblyTypes;
+        int totalCommandCount;
+        int staticCommandCount;
+        bool hasBeenInitialized;
+        
+        
+        // Input
         string consoleInputString = string.Empty;
         int selected;
         int moveToEnd;
         bool isActive;
         int setFocus;
 
-
+        // Drawing
+        GUISkin consoleSkin;
         float consoleWidth;
         float consoleHeight;
         Vector2 consoleInputDrawPos;
         Vector2 consoleInputSize;
 
 
-        
-        void Start() {
-            consoleSkin = Resources.Load<GUISkin>("Dev Console Skin");
-            const BindingFlags BINDING_FLAGS = BindingFlags.Default | BindingFlags.Instance | BindingFlags.Static |
-                                       BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.InvokeMethod;
-            
-            Type[] assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
-            Type commandAttribute = typeof(DevCommand);
-            
-            
-            List<MethodInfo> memberInfoCollection = new (24);
-            foreach (Type loadedType in assemblyTypes)
-            {
-                memberInfoCollection.AddRange(loadedType.GetMethods(BINDING_FLAGS).Where(info => Attribute.IsDefined(info, commandAttribute)));
 
-                foreach (MethodInfo info in memberInfoCollection)
-                {
-                    commands.Add(new ConsoleCommand(info));
+        
+        /*
+         * Core console functionality
+         */
+        
+        void InitializeConsole() {
+            consoleSkin = Resources.Load<GUISkin>("Dev Console Skin");
+            assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
+        }
+        
+        void LoadStaticCommands() {
+            foreach (Type loadedType in assemblyTypes) {
+                MethodInfo[] methodsInType = loadedType.GetMethods(STATIC_BINDING_FLAGS);
+                foreach (MethodInfo methodInfo in methodsInType) {
+                    DevCommand devCommand = methodInfo.GetCustomAttribute<DevCommand>();
+                    if (devCommand == null) continue;
+                    
+                    CommandData cmdData = new ();
+                    cmdData.AssignCommand(devCommand, methodInfo);
+                    commands[totalCommandCount++] = cmdData;
                 }
-                memberInfoCollection.Clear();
+            }
+
+            staticCommandCount = totalCommandCount;
+        }
+        
+        void LoadInstanceCommands() {
+            MonoBehaviour[] monoBehavioursInScene = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+
+            foreach (MonoBehaviour scriptBase in monoBehavioursInScene) {
+                MethodInfo[] methodsInType = scriptBase.GetType().GetMethods(INSTANCED_BINDING_FLAGS);
+                foreach (MethodInfo methodInfo in methodsInType) {
+                    DevCommand devCommand = methodInfo.GetCustomAttribute<DevCommand>();
+                    if (devCommand == null) continue;
+                    
+                    if (HasFoundInstancedCommand(methodInfo, out int index)) {
+                        commands[index].AddTarget(scriptBase);
+                    }
+                    else {
+                        CommandData cmdData = new ();
+                        cmdData.AssignCommand(devCommand, methodInfo);
+                        commands[totalCommandCount++] = cmdData;
+                    }
+                }
             }
         }
+        
+        bool HasFoundInstancedCommand(MethodInfo methodInfo, out int index) {
+            for (int i = staticCommandCount; i < totalCommandCount; i++) {
+                if (commands[i].IsMethod(methodInfo)) {
+                    index = i;
+                    return true;
+                }
+            }
+
+            index = -1;
+            return false;
+        }
+        
+        
+        
+        /*
+         * Console Actions
+         */
+        
+        
+        void OpenConsole() {
+            isActive = true;
+            setFocus = 1;
+            consoleInputString = string.Empty;
+
+            if (hasBeenInitialized == false) {
+                hasBeenInitialized = true;
+                InitializeConsole();
+                LoadStaticCommands();
+            }
+            
+            LoadInstanceCommands();
+        }
+
+        void CloseConsole() {
+            totalCommandCount = staticCommandCount;
+            isActive = false;
+            consoleInputString = string.Empty;
+            selected = -1;
+            GUI.FocusControl(null);
+        }
+        
+        
+        
+        
+        /*
+         * Main logic flow
+         */
         
         
         void OnGUI() {
@@ -69,8 +173,11 @@ namespace Jerbo.Tools
                 return;
             }
 
+            /*
+             * Console is active
+             */
             
-            // Is Active
+            
             if (e.KeyUp(KeyCode.Escape) || e.KeyUp(KeyCode.F1)) CloseConsole();
             
             GUISkin skin = GUI.skin;
@@ -83,18 +190,6 @@ namespace Jerbo.Tools
         }
 
 
-        void OpenConsole() {
-            isActive = true;
-            setFocus = 1;
-            consoleInputString = string.Empty;
-        }
-
-        void CloseConsole() {
-            isActive = false;
-            consoleInputString = string.Empty;
-            selected = -1;
-            GUI.FocusControl(null);
-        }
         
         
         void DrawConsole() {
@@ -108,13 +203,13 @@ namespace Jerbo.Tools
             * Fuzzy search for matching commands
             */
             
-            List<ConsoleCommand> matchingCommands = new ();
+            List<CommandData> matchingCommands = new ();
             if (hasInputText) {
                 string[] slicedInputString = consoleInputString.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                foreach (ConsoleCommand cmd in commands) {
+                foreach (CommandData cmd in commands) {
                     bool matchesAll = true;
                     foreach (string inputSlice in slicedInputString) {
-                        if (cmd.GetCommandName().Contains(inputSlice, StringComparison.OrdinalIgnoreCase) == false) {
+                        if (cmd.GetDisplayName().Contains(inputSlice, StringComparison.OrdinalIgnoreCase) == false) {
                             matchesAll = false;
                             break;
                         }
@@ -133,12 +228,12 @@ namespace Jerbo.Tools
                 selected = -1;
             }
             
-            if (GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD) {
+            if (GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID) {
                 if (selected != -1) {
                     selected = Mathf.Clamp(selected, 0, matchingCommands.Count - 1);
 
                     if (e.KeyDown(KeyCode.KeypadEnter) || e.KeyDown(KeyCode.Return) || e.KeyDown(KeyCode.Tab)) {
-                        consoleInputString = matchingCommands[selected].GetCommandName() + " ";
+                        consoleInputString = matchingCommands[selected].GetDisplayName() + " ";
                         moveToEnd = 2;
                     }
                     
@@ -162,15 +257,18 @@ namespace Jerbo.Tools
             /*
              * draw console input area
              */
+            
             consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING + height * SCREEN_HEIGHT_PERCENTAGE));
             consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, height * SCREEN_HEIGHT_PERCENTAGE);
 
-            GUI.SetNextControlName(CONSOLE_INPUT_FIELD);
+            GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
             Rect inputWindowRect = new (consoleInputDrawPos, consoleInputSize);
             consoleInputString = GUI.TextField(inputWindowRect, consoleInputString);
             hasInputText = consoleInputString.Length > 0;
 
 
+            
+            
             
             /*
              * Inputs regarding movement inside the hint window
@@ -194,14 +292,13 @@ namespace Jerbo.Tools
             
             if (setFocus > 0) {
                 --setFocus;
-                GUI.FocusControl(CONSOLE_INPUT_FIELD);
+                GUI.FocusControl(CONSOLE_INPUT_FIELD_ID);
             }
             
             if (moveToEnd > 0) {
                 --moveToEnd;
                 TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
                 text.MoveTextEnd();
-                // text.SelectNone();
             }
             
             GUI.enabled = true;
@@ -209,7 +306,7 @@ namespace Jerbo.Tools
 
 
 
-        void DrawHintWindow(List<ConsoleCommand> matchingCommands) {
+        void DrawHintWindow(List<CommandData> matchingCommands) {
             
             /*
              * Draw Command Hints
@@ -218,8 +315,8 @@ namespace Jerbo.Tools
             float maximumWidth = 0;
             float maximumHeight = 0;
             GUIContent sizeHelper = new ();
-            foreach (ConsoleCommand cmd in matchingCommands) {
-                sizeHelper.text = cmd.GetCommandName();
+            foreach (CommandData cmd in matchingCommands) {
+                sizeHelper.text = cmd.GetDisplayName();
                 Vector2 size = consoleSkin.label.CalcSize(sizeHelper);
                 maximumWidth = Mathf.Max(size.x, maximumWidth);
                 maximumHeight += size.y + HINT_HEIGHT_TEXT_PADDING;
@@ -231,103 +328,79 @@ namespace Jerbo.Tools
             Vector2 hintStartPos = hintBackgroundRect.position + new Vector2(0, maximumHeight);
             float stepHeight = maximumHeight / matchingCommands.Count;
             for (int i = 0; i < matchingCommands.Count; i++) {
-                ConsoleCommand cmd = matchingCommands[i];
+                CommandData cmd = matchingCommands[i];
                 Vector2 pos = hintStartPos - new Vector2(0, (i+1) * stepHeight);
                 
                 GUI.enabled = i == selected;
-                GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), cmd.GetCommandName());
+                GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), cmd.GetDisplayName());
             }
             
         }
-
         
         
-        // void Update() {
-        //     
-        //     if (DevInput.ToggleConsole())
-        //     {
-        //         isActive = !isActive;
-        //         if (isActive) {
-        //             ResetConsoleVariables();
-        //         }
-        //     }
-        //
-        //     
-        //     if (Input.GetKeyDown(KeyCode.Space))
-        //     {
-        //         object target = GetComponent<TestScript>();
-        //         foreach (ConsoleCommand cmd in commands)
-        //         {
-        //             switch (cmd.info)
-        //             {
-        //                 case FieldInfo info:
-        //                     Debug.Log($"Calling: {info.Name} - {info} - {info.GetType()}");
-        //                     object value = info.GetValue(target);
-        //                     
-        //                     
-        //                     if (value is Transform tr) info.SetValue(target, Camera.main.transform);
-        //                     else if (value is UnityEvent unityEvent) unityEvent.Invoke();
-        //                     else if (value is Action action)
-        //                     {
-        //                         action.Invoke();
-        //                     }
-        //                     
-        //                     break;
-        //                 
-        //                 case MethodInfo info:
-        //                     Debug.Log($"Calling: {info.Name} - {info} - {info.GetType()}");
-        //                     break;
-        //                 
-        //                 case PropertyInfo info: 
-        //                     Debug.Log($"Calling: {info.Name} - {info} - {info.GetType()}");
-        //                     break;
-        //                 
-        //                 case EventInfo info:
-        //                     Debug.Log($"Calling: {info.Name} - {info} - {info.GetType()}");
-        //                     
-        //                     
-        //                     // Retrieve the delegate from the EventInfo
-        //                     var eventDelegate = info.GetRaiseMethod()?.Invoke(target, null) as Delegate;
-        //
-        //                     // Alternative way to get the delegate using reflection, if GetRaiseMethod is not available
-        //                     if (eventDelegate == null)
-        //                     {
-        //                         var fieldInfo = target.GetType().GetField(info.Name, BindingFlags.NonPublic | BindingFlags.Instance);
-        //                         eventDelegate = fieldInfo?.GetValue(target) as Delegate;
-        //                     }
-        //
-        //                     // Invoke the event if the delegate is found
-        //                     if (eventDelegate != null)
-        //                     {
-        //                         Type[] args = eventDelegate.Method.GetGenericArguments();
-        //                         
-        //                         eventDelegate.DynamicInvoke(); // Pass any necessary arguments here
-        //                     }
-        //                     else
-        //                     {
-        //                         Debug.LogWarning($"Event {info.Name} has no subscribers.");
-        //                     }
-        //
-        //                     break;
-        //             }
-        //         }
-        //     }
-        // }
-
-
-        class ConsoleCommand
-        {
-            internal ConsoleCommand(MethodInfo info)
-            {
-                this.info = info;
-            }
-            MethodInfo info;
+        
+        
+        class InputCommand {
+            internal string inputText;
+            internal DevCommand selectedCommand;
+            internal List<CommandArgument> commandArguments = new (6);
             
-            internal string GetCommandName()
-            {
-                return info.Name;
+            internal void ResetCommand() {
+                selectedCommand = null;
+                commandArguments.Clear();
             }
         }
+
+
+        class CommandArgument {
+            internal readonly string displayName;
+            internal readonly object argValue;
+            
+            public CommandArgument(string displayName, object argValue) {
+                this.displayName = displayName;
+                this.argValue = argValue;
+            }
+        }
+
         
+        struct CommandData {
+            string displayName;
+            string hintText;
+            MethodInfo method;
+            ParameterInfo[] parameters;
+            readonly List<Object> targets;
+
+            internal void AssignCommand(DevCommand devCommand, MethodInfo methodInfo) {
+                method = methodInfo;
+                displayName = devCommand.displayName ?? method.Name;
+            
+                parameters = method.GetParameters();
+                StringBuilder sb = new (84);
+                sb.Append(displayName);
+                sb.Append(SPACE);
+                foreach (ParameterInfo param in parameters) {
+                    sb.Append(param.Name);
+                    sb.Append(SPACE);
+                }
+            
+                hintText = sb.ToString();
+            }
+
+            internal void AddTarget(Object target) => targets.Add(target);
+            internal string GetDisplayName() => displayName;
+            internal string GetHint() => hintText;
+            public bool IsMethod(MethodInfo methodInfo) => method == methodInfo;
+        }
+
+
+        struct HintData {
+            public readonly string displayString;
+            public readonly string rawValue;
+            
+            public HintData(string displayString, string rawValue) {
+                this.displayString = displayString;
+                this.rawValue = rawValue;
+            }
+        }
     }
 }
