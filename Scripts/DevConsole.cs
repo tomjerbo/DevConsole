@@ -15,12 +15,6 @@ namespace Jerbo.Tools
             consoleContainer.AddComponent<DevConsole>();
         }
         
-
-        /*
-         * Static
-         */
-
-        
         
         
         /*
@@ -47,7 +41,7 @@ namespace Jerbo.Tools
         
 
         // Core
-        readonly CommandData[] commands = new CommandData[256];
+        static readonly CommandData[] Commands = new CommandData[256];
         Type[] assemblyTypes;
         int totalCommandCount;
         int staticCommandCount;
@@ -55,11 +49,11 @@ namespace Jerbo.Tools
         
         
         // Input
+        static readonly StringBuilder textBuilder = new (256);
         readonly InputCommand inputCommand = new ();
         readonly InputHint[] inputHints = new InputHint[32];
-        readonly StringBuilder stringBuilder = new (256);
-        int selected;
-        int moveToEnd;
+        int selectedHint;
+        int moveMarkerToEnd;
         bool isActive;
         int setFocus;
 
@@ -89,7 +83,7 @@ namespace Jerbo.Tools
                     DevCommand devCommand = methodInfo.GetCustomAttribute<DevCommand>();
                     if (devCommand == null) continue;
                     
-                    commands[totalCommandCount++].AssignCommand(devCommand, methodInfo, null);
+                    Commands[totalCommandCount++].AssignCommand(devCommand, methodInfo, null);
                 }
             }
 
@@ -106,10 +100,10 @@ namespace Jerbo.Tools
                     if (devCommand == null) continue;
                     
                     if (HasFoundInstancedCommand(methodInfo, out int index)) {
-                        commands[index].AddTarget(scriptBase);
+                        Commands[index].AddTarget(scriptBase);
                     }
                     else {
-                        commands[totalCommandCount++].AssignCommand(devCommand, methodInfo, scriptBase);
+                        Commands[totalCommandCount++].AssignCommand(devCommand, methodInfo, scriptBase);
                     }
                 }
             }
@@ -117,7 +111,7 @@ namespace Jerbo.Tools
         
         bool HasFoundInstancedCommand(MethodInfo methodInfo, out int index) {
             for (int i = staticCommandCount; i < totalCommandCount; i++) {
-                if (commands[i].IsSameMethod(methodInfo)) {
+                if (Commands[i].IsSameMethod(methodInfo)) {
                     index = i;
                     return true;
                 }
@@ -137,7 +131,7 @@ namespace Jerbo.Tools
         void OpenConsole() {
             isActive = true;
             setFocus = 1;
-            inputCommand.Reset();
+            inputCommand.Clear();
 
             if (hasBeenInitialized == false) {
                 hasBeenInitialized = true;
@@ -151,7 +145,7 @@ namespace Jerbo.Tools
         void CloseConsole() {
             totalCommandCount = staticCommandCount;
             isActive = false;
-            selected = -1;
+            selectedHint = -1;
             GUI.FocusControl(null);
         }
         
@@ -195,6 +189,7 @@ namespace Jerbo.Tools
             Event e = Event.current;
             
             
+            
 
             int hintAmount = BuildHints();
             
@@ -204,27 +199,26 @@ namespace Jerbo.Tools
              */
 
             if (inputCommand.HasText() == false || hintAmount == 0) {
-                selected = -1;
+                selectedHint = -1;
             }
             
             if (GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID && hintAmount > 0) {
-                if (selected != -1) {
-                    selected = Mathf.Clamp(selected, 0, hintAmount - 1);
+                if (selectedHint != -1) {
+                    selectedHint = Mathf.Clamp(selectedHint, 0, hintAmount - 1);
 
                     if (e.KeyDown(KeyCode.KeypadEnter) || e.KeyDown(KeyCode.Return) || e.KeyDown(KeyCode.Tab)) {
-                        
-                        // Apply hint
-                        moveToEnd = 2;
+                        inputCommand.UseHint(inputHints[selectedHint]);
+                        moveMarkerToEnd = 2;
                     }
                 }
                 
                 if (e.KeyDown(KeyCode.DownArrow)) {
-                    selected -= 1;
-                    if (selected < 0) selected = hintAmount - 1;
+                    selectedHint -= 1;
+                    if (selectedHint < 0) selectedHint = hintAmount - 1;
                 }
                 else if (e.KeyDown(KeyCode.UpArrow)) {
-                    selected += 1;
-                    selected %= hintAmount;
+                    selectedHint += 1;
+                    selectedHint %= hintAmount;
                 }
             }
             
@@ -243,8 +237,11 @@ namespace Jerbo.Tools
             GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
             Rect inputWindowRect = new (consoleInputDrawPos, consoleInputSize);
             inputCommand.inputText = GUI.TextField(inputWindowRect, inputCommand.inputText);
-
-
+            AssignMatchingCommands();
+            
+            
+            
+            
             
             
             /*
@@ -255,7 +252,7 @@ namespace Jerbo.Tools
                 DrawHintWindow(hintAmount);
             }
             else {
-                selected = -1;
+                selectedHint = -1;
             }
 
             
@@ -270,8 +267,8 @@ namespace Jerbo.Tools
                 GUI.FocusControl(CONSOLE_INPUT_FIELD_ID);
             }
             
-            if (moveToEnd > 0) {
-                --moveToEnd;
+            if (moveMarkerToEnd > 0) {
+                --moveMarkerToEnd;
                 TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
                 text.MoveTextEnd();
             }
@@ -304,7 +301,7 @@ namespace Jerbo.Tools
                 InputHint hint = inputHints[i];
                 Vector2 pos = hintStartPos - new Vector2(0, (i+1) * stepHeight);
                 
-                GUI.enabled = i == selected;
+                GUI.enabled = i == selectedHint;
                 GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), hint.displayString);
             }
             
@@ -330,18 +327,18 @@ namespace Jerbo.Tools
                     
                     bool matchingHint = true; 
                     foreach (string word in inputWords) {
-                        if (commands[i].GetDisplayName().Contains(word, StringComparison.OrdinalIgnoreCase) == false) {
+                        if (Commands[i].GetDisplayName().Contains(word, StringComparison.InvariantCultureIgnoreCase) == false) {
                             matchingHint = false;
                             break;
                         }
                     }
 
                     if (matchingHint) {
-                        stringBuilder.Clear();
-                        stringBuilder.Append(commands[i].GetFullHint());
-                        stringBuilder.Append(SPACE);
+                        textBuilder.Clear();
+                        textBuilder.Append(Commands[i].GetFullHint());
+                        textBuilder.Append(SPACE);
 
-                        inputHints[hintsFound++].SetHint(stringBuilder, commands[i].GetDisplayName());
+                        inputHints[hintsFound++].SetHint(textBuilder, Commands[i].GetDisplayName());
                     }
                 }
             }
@@ -351,44 +348,90 @@ namespace Jerbo.Tools
 
             return hintsFound;
         }
-        
-        
-        
-        
-        
+
+
+
+
+        void AssignMatchingCommands() {
+            inputCommand.RemoveSelection();
+            if (inputCommand.HasText() == false) return;
+            
+            /*
+             * Commands
+             */
+
+            int matchingCommandIndex = -1;
+            int longestMatch = 0;
+
+            for (int i = 0; i < totalCommandCount; i++) {
+                 if (inputCommand.inputText.StartsWith(Commands[i].GetDisplayName(), StringComparison.InvariantCultureIgnoreCase) == false) 
+                     continue;
+                 int lengthOfInput = Commands[i].GetDisplayName().Length;
+                 if (lengthOfInput > longestMatch) {
+                     matchingCommandIndex = i;
+                     longestMatch = lengthOfInput;
+                 }
+            }
+
+            if (matchingCommandIndex != -1) {
+                inputCommand.SelectCommand(matchingCommandIndex);
+            }
+
+
+
+            /*
+             * Arguments
+             */
+
+            if (inputCommand.HasCommand() == false) return;
+            
+            
+            
+        }
         
         
         
         
         class InputCommand {
             internal string inputText;
-            internal DevCommand selectedCommand;
-            internal List<InputArgument> commandArguments = new (6);
+            int selectedCommand;
+            readonly InputArgument[] commandArguments = new InputArgument[12];
+            int argumentsAssigned;
             
-            internal void Reset() {
+            internal void Clear() {
                 inputText = string.Empty;
-                selectedCommand = null;
-                commandArguments.Clear();
+                selectedCommand = -1;
+                argumentsAssigned = 0;
             }
 
             internal void RemoveSelection() {
-                selectedCommand = null;
-                commandArguments.Clear();
+                selectedCommand = -1;
+                argumentsAssigned = 0;
+            }
+            public void SelectCommand(int matchingCommandIndex) => selectedCommand = matchingCommandIndex;
+            internal bool HasText() => string.IsNullOrEmpty(inputText) == false;
+            internal bool HasCommand() => selectedCommand != -1;
+
+            public void UseHint(InputHint inputHint) {
+                textBuilder.Clear();
+                if (HasCommand()) {
+                    textBuilder.Append($"{Commands[selectedCommand].GetDisplayName()} ");
+
+                    for (int i = 0; i < argumentsAssigned; i++) {
+                        textBuilder.Append($"{commandArguments[i].displayName} ");
+                    }
+                }
+                
+                textBuilder.Append($"{inputHint.outputString} ");
+                inputText = textBuilder.ToString();
             }
 
-            internal bool HasText() => string.IsNullOrEmpty(inputText) == false;
-            internal bool HasCommand() => selectedCommand != null;
         }
 
 
-        class InputArgument {
-            internal readonly string displayName;
+        struct InputArgument {
+            internal readonly string displayName; // Not using getters here since i wanna re-create these often anyway
             internal readonly object argValue;
-            
-            public InputArgument(string displayName, object argValue) {
-                this.displayName = displayName;
-                this.argValue = argValue;
-            }
         }
 
         
@@ -404,14 +447,13 @@ namespace Jerbo.Tools
                 displayName = string.IsNullOrEmpty(devCommand.displayName) ? method.Name : devCommand.displayName;
                 
                 parameters = method.GetParameters();
-                StringBuilder sb = new (84);
-                sb.Append(displayName);
-                sb.Append(SPACE);
+
+                textBuilder.Clear();
+                textBuilder.Append($"{displayName} ");
                 foreach (ParameterInfo param in parameters) {
-                    sb.Append(param.Name);
-                    sb.Append(SPACE);
+                    textBuilder.Append($"<{param.Name}> ");
                 }
-                hintText = sb.ToString();
+                hintText = textBuilder.ToString();
             
                 
                 if (targets == null) targets = new List<Object>();
@@ -420,13 +462,17 @@ namespace Jerbo.Tools
             }
 
             internal void AddTarget(Object target) => targets.Add(target);
-            internal string GetDisplayName() => displayName;
+            internal string GetDisplayName() => displayName; // Using getter to make it clear that 'displayName' only set via 'AssignCommand'
             internal string GetFullHint() => hintText;
             public bool IsSameMethod(MethodInfo methodInfo) => method == methodInfo;
         }
 
 
         struct InputHint {
+            internal enum HintType {
+                COMMAND,
+                ARGUMENT,
+            }
             internal string displayString;
             internal string outputString;
 
