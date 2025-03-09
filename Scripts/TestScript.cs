@@ -29,6 +29,13 @@ public class TestScript : MonoBehaviour
         myAction += () => { Debug.Log("Single Action called"); };
     }
 
+    enum PissingPants {
+        VeryPiss,
+        ShatPantsLikeAlot,
+        OMEGA_SHIT,
+        haybale,
+    }
+
 
     [DevCommand]
     public static void StaticMethod_Public(int number) {
@@ -40,6 +47,7 @@ public class TestScript : MonoBehaviour
         
     }
 
+    [DevCommand]
     public void LoadScene(Scene scene) {
         SceneManager.LoadScene(scene.name);
     }

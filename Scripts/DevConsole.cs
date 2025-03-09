@@ -3,18 +3,52 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
-using Object = System.Object;
+using UnityEngine.SceneManagement;
+using Object = UnityEngine.Object;
 
 namespace Jerbo.Tools
 {
     public class DevConsole : MonoBehaviour
     {
         [RuntimeInitializeOnLoadMethod]
-        public static void Init() {
+        public static void SpawnConsoleInScene() {
             GameObject consoleContainer = new ("- Dev Console -");
             consoleContainer.AddComponent<DevConsole>();
+            consoleContainer.hideFlags = HideFlags.HideAndDontSave;
         }
+
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+        static void CacheAssetReferences() {
+            /*
+             * Cant use assetdatabase in builds, need a way to load/cache assets
+             */
         
+            List<ScriptableObject> scriptableObjects = new ();
+            string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}");
+            foreach (string guid in assetGuids) {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                scriptableObjects.Add(UnityEditor.AssetDatabase.LoadAssetAtPath<ScriptableObject>(path));
+            }
+            SoAssets = scriptableObjects.ToArray();
+        
+        
+        
+            List<string> sceneAssetNames = new ();
+            assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(Scene)}");
+            foreach (string guid in assetGuids) {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                // Example path: Assets/Spawn Points/Map 1/Docks In Water.asset
+                //                              Split -> [ assetName.extension ]
+                //                              Split -> [ assetName ]
+            
+                string nameFromPath = path.Split('/')[^1]; // Last split is assetName.extension
+                string nameWithoutExtension = nameFromPath.Split('.')[0]; // First split is assetName
+                sceneAssetNames.Add(nameWithoutExtension);
+            }
+            SceneNames = sceneAssetNames.ToArray();
+        }
+#endif
         
         
         /*
@@ -41,15 +75,18 @@ namespace Jerbo.Tools
         
 
         // Core
+        bool hasConsoleBeenInitialized;
         static readonly CommandData[] Commands = new CommandData[256];
-        Type[] assemblyTypes;
         int totalCommandCount;
         int staticCommandCount;
-        bool hasBeenInitialized;
+        
+        static ScriptableObject[] SoAssets;
+        static string[] SceneNames;
+
         
         
         // Input
-        static readonly StringBuilder textBuilder = new (256);
+        static readonly StringBuilder TextBuilder = new (256);
         readonly InputCommand inputCommand = new ();
         readonly InputHint[] inputHints = new InputHint[32];
         int selectedHint;
@@ -73,10 +110,10 @@ namespace Jerbo.Tools
         
         void InitializeConsole() {
             consoleSkin = Resources.Load<GUISkin>("Dev Console Skin");
-            assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
         }
         
         void LoadStaticCommands() {
+            Type[] assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
             foreach (Type loadedType in assemblyTypes) {
                 MethodInfo[] methodsInType = loadedType.GetMethods(STATIC_BINDING_FLAGS);
                 foreach (MethodInfo methodInfo in methodsInType) {
@@ -122,7 +159,6 @@ namespace Jerbo.Tools
         }
         
         
-        
         /*
          * Console Actions
          */
@@ -133,22 +169,25 @@ namespace Jerbo.Tools
             setFocus = 1;
             inputCommand.Clear();
 
-            if (hasBeenInitialized == false) {
-                hasBeenInitialized = true;
+            if (hasConsoleBeenInitialized == false) {
+                hasConsoleBeenInitialized = true;
+                
                 InitializeConsole();
                 LoadStaticCommands();
+                LoadInstanceCommands();
             }
-            
-            LoadInstanceCommands();
+            else {
+                LoadInstanceCommands();
+            }
         }
 
+        
         void CloseConsole() {
             totalCommandCount = staticCommandCount;
             isActive = false;
             selectedHint = -1;
             GUI.FocusControl(null);
         }
-        
         
         
         
@@ -237,7 +276,7 @@ namespace Jerbo.Tools
             GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
             Rect inputWindowRect = new (consoleInputDrawPos, consoleInputSize);
             inputCommand.inputText = GUI.TextField(inputWindowRect, inputCommand.inputText);
-            AssignMatchingCommands();
+            ParseInputForCommandsAndArguments();
             
             
             
@@ -334,15 +373,91 @@ namespace Jerbo.Tools
                     }
 
                     if (matchingHint) {
-                        textBuilder.Clear();
-                        textBuilder.Append(Commands[i].GetFullHint());
-                        textBuilder.Append(SPACE);
+                        TextBuilder.Clear();
+                        TextBuilder.Append(Commands[i].GetFullHint());
+                        TextBuilder.Append(SPACE);
 
-                        inputHints[hintsFound++].SetHint(textBuilder, Commands[i].GetDisplayName());
+                        inputHints[hintsFound++].SetHint(TextBuilder, Commands[i].GetDisplayName());
                     }
                 }
             }
             else { // Has command, look for arguments
+                /*
+                 * check command for what the next argument type is and parse the approriate part of input accordingly
+                 * Look into how to parse string, would be nice to have " or ' encapsulation 
+                 */
+                
+                // If is not asset type or has all arguments
+                if (inputCommand.HasRequiredArguments()) {
+                    return hintsFound;
+                }
+                
+                Type argumentType = inputCommand.GetNextParameterType();
+                
+                /*
+                 * Bool
+                 */
+
+                if (argumentType == typeof(bool)) {
+                    TextBuilder.Clear();
+                    TextBuilder.Append(bool.TrueString);
+                    TextBuilder.Append(SPACE);
+                    inputHints[hintsFound++].SetHint(TextBuilder, bool.TrueString);
+                    
+                    TextBuilder.Clear();
+                    TextBuilder.Append(bool.FalseString);
+                    TextBuilder.Append(SPACE);
+                    inputHints[hintsFound++].SetHint(TextBuilder, bool.FalseString);
+                    return hintsFound;
+                }
+
+                string[] inputWithoutMatches = inputCommand.GetInputWithoutMatches().Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
+                if (inputWithoutMatches.Length == 0) return hintsFound;
+                
+                /*
+                 * Enums
+                 */
+                
+                if (argumentType.IsEnum) {
+                    string[] namesInsideEnum = argumentType.GetEnumNames();
+                    foreach (string enumValueName in namesInsideEnum) {
+                        bool containsWord = true;
+                        foreach (string inputWord in inputWithoutMatches) {
+                            if (enumValueName.Contains(inputWord, StringComparison.InvariantCultureIgnoreCase)) continue;
+                            
+                            containsWord = false;
+                            break;
+                        }
+
+                        if (containsWord) {
+                            TextBuilder.Clear();
+                            TextBuilder.Append(enumValueName);
+                            TextBuilder.Append(SPACE);
+                            inputHints[hintsFound++].SetHint(TextBuilder, enumValueName);
+                        }
+                    }
+
+                    return hintsFound;
+                }
+                
+                
+                
+                /*
+                 * Scenes
+                 */
+                
+                if (argumentType == typeof(Scene)) {
+                    
+                }
+                
+                
+                /*
+                 * ScriptableObjects
+                 */
+                
+                if (typeof(ScriptableObject).IsAssignableFrom(argumentType)) {
+                    
+                }
                 
             }
 
@@ -352,7 +467,7 @@ namespace Jerbo.Tools
 
 
 
-        void AssignMatchingCommands() {
+        void ParseInputForCommandsAndArguments() {
             inputCommand.RemoveSelection();
             if (inputCommand.HasText() == false) return;
             
@@ -384,14 +499,17 @@ namespace Jerbo.Tools
              */
 
             if (inputCommand.HasCommand() == false) return;
+            /*
+             * Look into how to parse string, would be nice to have " or ' encapsulation 
+             */
+            
             
             
             
         }
         
         
-        
-        
+
         class InputCommand {
             internal string inputText;
             int selectedCommand;
@@ -412,20 +530,54 @@ namespace Jerbo.Tools
             internal bool HasText() => string.IsNullOrEmpty(inputText) == false;
             internal bool HasCommand() => selectedCommand != -1;
 
-            public void UseHint(InputHint inputHint) {
-                textBuilder.Clear();
+            /*
+             * Don't break existing text when applying hint!
+             * Applying the visual string, assigning matching command + argument is done later in the update loop
+             * so we are not assigning the actual command or argument here, only inputting a string that the parser will
+             * recognize later!
+             */
+            internal void UseHint(InputHint inputHint) {
+                TextBuilder.Clear();
                 if (HasCommand()) {
-                    textBuilder.Append($"{Commands[selectedCommand].GetDisplayName()} ");
+                    TextBuilder.Append($"{Commands[selectedCommand].GetDisplayName()} ");
 
                     for (int i = 0; i < argumentsAssigned; i++) {
-                        textBuilder.Append($"{commandArguments[i].displayName} ");
+                        TextBuilder.Append($"{commandArguments[i].displayName} ");
                     }
                 }
                 
-                textBuilder.Append($"{inputHint.outputString} ");
-                inputText = textBuilder.ToString();
+                TextBuilder.Append($"{inputHint.outputString} ");
+                inputText = TextBuilder.ToString();
             }
 
+            internal bool HasRequiredArguments() {
+                if (selectedCommand == -1) return false;
+                // should we use '==' or '>=' .. not sure yet
+                return argumentsAssigned >= Commands[selectedCommand].GetParameterCount();
+            }
+            
+            // Assumes you have command set and isn't above parameter count, feels dumb to do this redirect
+            public Type GetNextParameterType() {
+                return Commands[selectedCommand].GetParameterByIndex(argumentsAssigned).GetType();
+            }
+
+            public string GetInputWithoutMatches() {
+                TextBuilder.Clear();
+                TextBuilder.Append(inputText);
+
+                if (HasCommand() == false) return TextBuilder.ToString();
+                int removeAmount = Commands[selectedCommand].GetDisplayName().Length;
+                
+                TextBuilder.Remove(0, removeAmount);
+                if (TextBuilder[0] == SPACE) TextBuilder.Remove(0, 1); // can this be assumed to always be true if it's assigned?
+
+                for (int i = 0; i < argumentsAssigned; i++) {
+                    TextBuilder.Remove(0, commandArguments[i].displayName.Length);
+                    if (TextBuilder[0] == SPACE) TextBuilder.Remove(0, 1);
+                }
+
+                return TextBuilder.ToString();
+            }
         }
 
 
@@ -441,30 +593,34 @@ namespace Jerbo.Tools
             MethodInfo method;
             ParameterInfo[] parameters;
             List<Object> targets;
+            int parameterCount;
 
             internal void AssignCommand(DevCommand devCommand, MethodInfo methodInfo, Object target) {
                 method = methodInfo;
                 displayName = string.IsNullOrEmpty(devCommand.displayName) ? method.Name : devCommand.displayName;
                 
                 parameters = method.GetParameters();
+                parameterCount = parameters.Length;
 
-                textBuilder.Clear();
-                textBuilder.Append($"{displayName} ");
+                TextBuilder.Clear();
+                TextBuilder.Append($"{displayName} ");
                 foreach (ParameterInfo param in parameters) {
-                    textBuilder.Append($"<{param.Name}> ");
+                    TextBuilder.Append($"<{param.Name}> ");
                 }
-                hintText = textBuilder.ToString();
+                hintText = TextBuilder.ToString();
             
                 
                 if (targets == null) targets = new List<Object>();
                 else targets.Clear();
                 targets.Add(target);
             }
-
             internal void AddTarget(Object target) => targets.Add(target);
             internal string GetDisplayName() => displayName; // Using getter to make it clear that 'displayName' only set via 'AssignCommand'
             internal string GetFullHint() => hintText;
+            internal MethodInfo GetMethod() => method;
             public bool IsSameMethod(MethodInfo methodInfo) => method == methodInfo;
+            internal int GetParameterCount() => parameterCount;
+            internal ParameterInfo GetParameterByIndex(int index) => parameters[index];
         }
 
 
