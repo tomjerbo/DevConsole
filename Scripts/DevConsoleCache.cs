@@ -48,9 +48,7 @@ public class DevConsoleCache : ScriptableObject
     }
 #endif
 
-    static string[] SEARCH_FOLDERS = new string[] {
-        "Assets",
-    };
+    static string[] SEARCH_FOLDERS = { "Assets" };
     public const string DEV_CONSOLE_CACHE_PATH = "Dev Console Cache";
     [HideInInspector] public ScriptableObject[] AssetReferences;
     [HideInInspector] public string[] AssetNames;
