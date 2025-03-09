@@ -17,48 +17,6 @@ public class DevConsole : MonoBehaviour
         consoleContainer.AddComponent<DevConsole>();
         DontDestroyOnLoad(consoleContainer);
     }
-
-#if UNITY_EDITOR
-    [UnityEditor.InitializeOnLoadMethod]
-    static void CacheAssetReferences() {
-        /*
-         * Cant use assetdatabase in builds, need a way to load/cache assets
-         */
-    
-        
-        string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}");
-        AssetReferences = new ScriptableObject[assetGuids.Length];
-        AssetNames = new string[assetGuids.Length];
-        
-        for (int i = 0; i < assetGuids.Length; i++) {
-            string guid = assetGuids[i];
-            string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
-            AssetReferences[i] = UnityEditor.AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-            AssetNames[i] = AssetReferences[i].name;
-        }
-        
-        
-
-        assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(Scene)}");
-        SceneNames = new string[assetGuids.Length];
-        ScenePaths = new string[assetGuids.Length];
-
-        for (int i = 0; i < assetGuids.Length; i++) {
-            string guid = assetGuids[i];
-            string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
-            // Example path: Assets/Spawn Points/Map 1/Docks In Water.asset
-            //                              Split -> [ assetName.extension ]
-            //                              Split -> [ assetName ]
-
-            string nameFromPath = path.Split('/')[^1]; // Last split is assetName.extension
-            string nameWithoutExtension = nameFromPath.Split('.')[0]; // First split is assetName
-            SceneNames[i] = nameWithoutExtension;
-            ScenePaths[i] = path;
-        }
-
-        Debug.Log($"DevConsole Cached -> {AssetReferences.Length} ScriptableObjects & {SceneNames.Length} Scenes");
-    }
-#endif
     
     
     /*
@@ -70,6 +28,7 @@ public class DevConsole : MonoBehaviour
     const BindingFlags STATIC_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Static;
 
     
+    const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
     const float SCREEN_HEIGHT_PERCENTAGE = 0.05f;
     const float WIDTH_SPACING = 8f;
@@ -78,6 +37,8 @@ public class DevConsole : MonoBehaviour
     const char SPACE = ' ';
     const char STRING_MARKER = '"';
 
+
+    const string HIGHLIGHT_TEXT_CODE = "#FFFFFFFF";
 
     
     
@@ -88,14 +49,10 @@ public class DevConsole : MonoBehaviour
 
     // Core
     bool hasConsoleBeenInitialized;
+    static DevConsoleCache Cache;
     static readonly CommandData[] Commands = new CommandData[256];
     static int StaticCommandCount;
     int totalCommandCount;
-    
-    static ScriptableObject[] AssetReferences;
-    static string[] AssetNames;
-    static string[] SceneNames;
-    static string[] ScenePaths;
 
     
     
@@ -123,7 +80,8 @@ public class DevConsole : MonoBehaviour
      */
     
     void InitializeConsole() {
-        consoleSkin = Resources.Load<GUISkin>("Dev Console Skin");
+        consoleSkin = Resources.Load<GUISkin>(DEV_CONSOLE_SKIN_PATH);
+        Cache = Resources.Load<DevConsoleCache>(DevConsoleCache.DEV_CONSOLE_CACHE_PATH);
     }
     
     void LoadStaticCommands() {
@@ -211,9 +169,9 @@ public class DevConsole : MonoBehaviour
     
     
     void OnGUI() {
-        Event e = Event.current;
+        Event inputEvent = Event.current;
         if (isActive == false) {
-            if (e.KeyUp(KeyCode.F1)) OpenConsole();
+            if (inputEvent.OpenConsole()) OpenConsole();
             return;
         }
 
@@ -222,7 +180,7 @@ public class DevConsole : MonoBehaviour
          */
         
         
-        if (e.KeyUp(KeyCode.Escape) || e.KeyUp(KeyCode.F1)) CloseConsole();
+        if (inputEvent.CloseConsole()) CloseConsole();
         
         GUISkin skin = GUI.skin;
         GUI.skin = consoleSkin;
@@ -239,7 +197,7 @@ public class DevConsole : MonoBehaviour
     void DrawConsole() {
         float width = Screen.width;
         float height = Screen.height;
-        Event e = Event.current;
+        Event inputEvent = Event.current;
         
         
         
@@ -259,17 +217,17 @@ public class DevConsole : MonoBehaviour
             if (selectedHint != -1) {
                 selectedHint = Mathf.Clamp(selectedHint, 0, hintAmount - 1);
                 
-                if (e.KeyDown(KeyCode.KeypadEnter) || e.KeyDown(KeyCode.Return) || e.KeyDown(KeyCode.Tab)) {
+                if (inputEvent.InsertHint()) {
                     inputCommand.UseHint(inputHints[selectedHint]);
                     moveMarkerToEnd = 2;
                 }
             }
             
-            if (e.KeyDown(KeyCode.DownArrow)) {
+            if (inputEvent.NavigateDown()) {
                 selectedHint -= 1;
                 if (selectedHint < 0) selectedHint = hintAmount - 1;
             }
-            else if (e.KeyDown(KeyCode.UpArrow)) {
+            else if (inputEvent.NavigateUp()) {
                 selectedHint += 1;
                 selectedHint %= hintAmount;
             }
@@ -284,10 +242,10 @@ public class DevConsole : MonoBehaviour
          */
 
         
-        if (inputCommand.HasCommand() && (e.KeyDown(KeyCode.KeypadEnter, false) || e.KeyDown(KeyCode.Return, false))) {
+        if (inputCommand.HasCommand() && inputEvent.ExecuteCommand()) {
             ParseInputForCommandsAndArguments(true);
             if (inputCommand.TryExecuteCommand()) {
-                e.Use();
+                inputEvent.Use();
                 inputCommand.Clear();
                 moveMarkerToEnd = 2;
                 hintAmount = 0;
@@ -505,8 +463,8 @@ public class DevConsole : MonoBehaviour
          */
 
         if (argumentType == typeof(Scene)) {
-            for (int i = 0; i < SceneNames.Length; i++) {
-                string sceneName = SceneNames[i];
+            for (int i = 0; i < Cache.SceneNames.Length; i++) {
+                string sceneName = Cache.SceneNames[i];
                 bool containsWord = true;
                 foreach (string word in inputWithoutMatches) {
                     if (sceneName.Contains(word, StringComparison.InvariantCultureIgnoreCase)) continue;
@@ -533,7 +491,7 @@ public class DevConsole : MonoBehaviour
          */
 
         if (typeof(ScriptableObject).IsAssignableFrom(argumentType)) {
-            foreach (ScriptableObject asset in AssetReferences) {
+            foreach (ScriptableObject asset in Cache.AssetReferences) {
                 
                 /*
                  * Asset is scriptableObject but has wrong inheritance type
@@ -692,11 +650,11 @@ public class DevConsole : MonoBehaviour
             if (argumentType == typeof(Scene)) {
                 int longestSceneMatch = -1;
                 int matchingSceneIndex = -1;
-                for (int sceneIndex = 0; sceneIndex < SceneNames.Length; sceneIndex++) {
-                    if (inputText.StartsWith(SceneNames[sceneIndex] + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase) == false) 
+                for (int sceneIndex = 0; sceneIndex < Cache.SceneNames.Length; sceneIndex++) {
+                    if (inputText.StartsWith(Cache.SceneNames[sceneIndex] + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase) == false) 
                         continue;
                     
-                    int nameLength = SceneNames[sceneIndex].Length;
+                    int nameLength = Cache.SceneNames[sceneIndex].Length;
                     if (nameLength > longestSceneMatch) {
                         longestSceneMatch = nameLength;
                         matchingSceneIndex = sceneIndex;
@@ -705,7 +663,7 @@ public class DevConsole : MonoBehaviour
 
                 if (matchingSceneIndex != -1) {
                     inputText = inputText.Remove(0, longestSceneMatch);
-                    inputCommand.SetArgument(SceneNames[matchingSceneIndex], ScenePaths[matchingSceneIndex]);
+                    inputCommand.SetArgument(Cache.SceneNames[matchingSceneIndex], Cache.ScenePaths[matchingSceneIndex]);
                 }
                 
                 continue;
@@ -722,11 +680,11 @@ public class DevConsole : MonoBehaviour
                 int longestAssetMatch = -1;
                 int matchingAssetIndex = -1;
 
-                for (int assetIndex = 0; assetIndex < AssetReferences.Length; assetIndex++) {
-                    if (inputText.StartsWith(AssetNames[assetIndex] + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase) == false)
+                for (int assetIndex = 0; assetIndex < Cache.AssetReferences.Length; assetIndex++) {
+                    if (inputText.StartsWith(Cache.AssetNames[assetIndex] + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase) == false)
                         continue;
 
-                    int nameLength = AssetNames[assetIndex].Length;
+                    int nameLength = Cache.AssetNames[assetIndex].Length;
                     if (nameLength > longestAssetMatch) {
                         longestAssetMatch = nameLength;
                         matchingAssetIndex = assetIndex;
@@ -735,7 +693,7 @@ public class DevConsole : MonoBehaviour
 
                 if (matchingAssetIndex != -1) {
                     inputText = inputText.Remove(0, longestAssetMatch);
-                    inputCommand.SetArgument(AssetNames[matchingAssetIndex], AssetReferences[matchingAssetIndex]);
+                    inputCommand.SetArgument(Cache.AssetNames[matchingAssetIndex], Cache.AssetReferences[matchingAssetIndex]);
                 }
                 
                 continue;

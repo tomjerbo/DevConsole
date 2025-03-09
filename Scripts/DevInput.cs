@@ -22,58 +22,92 @@ namespace Jerbo.Tools {
             return false;
         }
         
-#if ENABLE_LEGACY_INPUT_MANAGER
         
-        static KeyCode openKey = KeyCode.BackQuote;
-        static KeyCode exitKey = KeyCode.Escape;
-        static KeyCode navigateUp = KeyCode.UpArrow;
-        static KeyCode navigateDown = KeyCode.DownArrow;
-        
-        public static bool OpenConsole() {
-            return Input.GetKeyDown(openKey);
-        }
-
-        public static int NavigateVertical() {
-            if (Input.GetKeyDown(navigateUp)) {
-                return 1;
+        public static bool ExecuteCommand(this Event e, bool useOnSuccess = true) {
+            if (e.isKey && e.type == EventType.KeyDown) {
+                foreach (KeyCode key in EXECUTE_COMMAND) {
+                    if (e.keyCode != key) continue;
+                    
+                    if (useOnSuccess) e.Use();
+                    return true;
+                }
             }
-            if (Input.GetKeyDown(navigateDown)) {
-                return -1;
+            
+            return false;
+        }
+        
+        public static bool CloseConsole(this Event e, bool useOnSuccess = true) {
+            if (e.isKey && e.type == EventType.KeyDown) {
+                foreach (KeyCode key in CLOSE_CONSOLE) {
+                    if (e.keyCode != key) continue;
+                    
+                    if (useOnSuccess) e.Use();
+                    return true;
+                }
             }
-
-            return 0;
-        }
-
-        public static bool CloseConsole() {
-            return Input.GetKeyDown(exitKey);
-        }
-#elif ENABLE_INPUT_SYSTEM
-        
-        static DevConsoleInputs consoleActions = new();
-        
-        static void ValidateInputIsEnabled() {
-            if (consoleActions.DevConsole.enabled == false)
-                consoleActions.DevConsole.Enable(); 
+            
+            return false;
         }
         
-        public static bool ToggleConsole() {
-            ValidateInputIsEnabled();
-            return consoleActions.DevConsole.ToggleConsole.WasPerformedThisFrame();
-        }
-
-        public static int NavigateVertical() {
-            ValidateInputIsEnabled();
-            if (consoleActions.DevConsole.NavigateUp.WasPerformedThisFrame()) {
-                return 1;
+        public static bool OpenConsole(this Event e, bool useOnSuccess = true) {
+            if (e.isKey && e.type == EventType.KeyDown) {
+                foreach (KeyCode key in OPEN_CONSOLE) {
+                    if (e.keyCode != key) continue;
+                    
+                    if (useOnSuccess) e.Use();
+                    return true;
+                }
             }
-            if (consoleActions.DevConsole.NavigateDown.WasPerformedThisFrame()) {
-                return -1;
-            }
-
-            return 0;
+            
+            return false;
         }
         
-#endif
+        public static bool InsertHint(this Event e, bool useOnSuccess = true) {
+            if (e.isKey && e.type == EventType.KeyDown) {
+                foreach (KeyCode key in INSERT_HINT) {
+                    if (e.keyCode != key) continue;
+                    
+                    if (useOnSuccess) e.Use();
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        public static bool NavigateUp(this Event e, bool useOnSuccess = true) {
+            if (e.isKey && e.type == EventType.KeyDown) {
+                foreach (KeyCode key in NAVIGATE_UP) {
+                    if (e.keyCode != key) continue;
+                    
+                    if (useOnSuccess) e.Use();
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        public static bool NavigateDown(this Event e, bool useOnSuccess = true) {
+            if (e.isKey && e.type == EventType.KeyDown) {
+                foreach (KeyCode key in NAVIGATE_DOWN) {
+                    if (e.keyCode != key) continue;
+                    
+                    if (useOnSuccess) e.Use();
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        
+        static KeyCode[] EXECUTE_COMMAND = { KeyCode.KeypadEnter, KeyCode.Return, };
+        static KeyCode[] CLOSE_CONSOLE = { KeyCode.F1, KeyCode.Escape, };
+        static KeyCode[] OPEN_CONSOLE = { KeyCode.F1 };
+        static KeyCode[] INSERT_HINT = { KeyCode.KeypadEnter, KeyCode.Return, KeyCode.Tab };
+        static KeyCode[] NAVIGATE_UP = { KeyCode.UpArrow, KeyCode.PageUp };
+        static KeyCode[] NAVIGATE_DOWN = { KeyCode.DownArrow, KeyCode.PageDown };
         
     }
 }
