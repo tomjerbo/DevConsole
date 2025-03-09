@@ -14,7 +14,7 @@ public class DevConsoleCache : ScriptableObject
         DevConsoleCache cache = Resources.Load<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
     
         
-        string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}");
+        string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}", SEARCH_FOLDERS);
         cache.AssetReferences = new ScriptableObject[assetGuids.Length];
         cache.AssetNames = new string[assetGuids.Length];
         
@@ -27,7 +27,7 @@ public class DevConsoleCache : ScriptableObject
         
         
 
-        assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:Scene");
+        assetGuids = UnityEditor.AssetDatabase.FindAssets("t:Scene", SEARCH_FOLDERS);
         cache.SceneNames = new string[assetGuids.Length];
         cache.ScenePaths = new string[assetGuids.Length];
 
@@ -48,6 +48,9 @@ public class DevConsoleCache : ScriptableObject
     }
 #endif
 
+    static string[] SEARCH_FOLDERS = new string[] {
+        "Assets",
+    };
     public const string DEV_CONSOLE_CACHE_PATH = "Dev Console Cache";
     [HideInInspector] public ScriptableObject[] AssetReferences;
     [HideInInspector] public string[] AssetNames;
