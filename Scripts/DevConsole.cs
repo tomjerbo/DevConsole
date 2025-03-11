@@ -482,9 +482,10 @@ public class DevConsole : MonoBehaviour
         
         /*
          * Scenes
+         * Disabled for now, scenes doesn't want to play nice, just make a method that takes in an int for buildIndex
          */
 
-        if (argumentType == typeof(Scene)) {
+        if (argumentType == typeof(Scene) && false) {
             for (int i = 0; i < Cache.SceneNames.Length; i++) {
                 string sceneName = Cache.SceneNames[i];
                 bool containsWord = true;
@@ -667,9 +668,11 @@ public class DevConsole : MonoBehaviour
             
             /*
              * Scenes
+             *
+             * Disabled for now, scenes doesn't want to play nice, just make a method that takes in an int for buildIndex
              */
 
-            if (argumentType == typeof(Scene)) {
+            if (argumentType == typeof(Scene) && false) {
                 int longestSceneMatch = -1;
                 int matchingSceneIndex = -1;
                 for (int sceneIndex = 0; sceneIndex < Cache.SceneNames.Length; sceneIndex++) {
@@ -867,10 +870,11 @@ public class DevConsole : MonoBehaviour
             object[] argumentValues = new object[parameters.Length];
             for (int i = 0; i < argumentValues.Length; i++) {
                 if (i < argumentsAssigned) {
-                    if (parameters[i].ParameterType == typeof(Scene)) {
+                    if (parameters[i].ParameterType == typeof(Scene) && false) {
                         /*
-                         * Scenes are wacky, you can only really load scenes that are active or inside build list
-                         */
+                        * Scenes are wacky, you can only really load scenes that are active or inside build list
+                         * Disabled for now, scenes doesn't want to play nice, just make a method that takes in an int for buildIndex
+                        */
                         argumentValues[i] = SceneManager.GetSceneByPath((string)inputArguments[i].argumentValue);
                     }
                     else {
