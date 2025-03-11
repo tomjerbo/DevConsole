@@ -1,3 +1,10 @@
+/*
+ * Enable this for projects with URP
+ */
+
+//#define URP_ENABLED
+
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -6,6 +13,9 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
+
+
+
 
 namespace Jerbo.Tools
 {
@@ -30,7 +40,7 @@ public class DevConsole : MonoBehaviour
     
     const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
-    const float SCREEN_HEIGHT_PERCENTAGE = 0.05f;
+    const float INPUT_WINDOW_HEIGHT = 32f;
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
     const float HINT_HEIGHT_TEXT_PADDING = 2f;
@@ -40,6 +50,7 @@ public class DevConsole : MonoBehaviour
 
     const string HIGHLIGHT_TEXT_CODE = "#FFFFFFFF";
 
+    
     
     
     /*
@@ -140,6 +151,10 @@ public class DevConsole : MonoBehaviour
         isActive = true;
         setFocus = 1;
         inputCommand.Clear();
+        
+#if URP_ENABLED
+        UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = false;
+#endif
 
         if (hasConsoleBeenInitialized == false) {
             hasConsoleBeenInitialized = true;
@@ -159,6 +174,10 @@ public class DevConsole : MonoBehaviour
         isActive = false;
         selectedHint = -1;
         GUI.FocusControl(null);
+        
+#if URP_ENABLED
+        UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = true;
+#endif
     }
     
     
@@ -182,13 +201,8 @@ public class DevConsole : MonoBehaviour
         
         if (inputEvent.CloseConsole()) CloseConsole();
         
-        GUISkin skin = GUI.skin;
-        GUI.skin = consoleSkin;
-        GUI.backgroundColor = Color.grey;
-    
+        
         DrawConsole();
-    
-        GUI.skin = skin;
     }
 
 
@@ -199,6 +213,9 @@ public class DevConsole : MonoBehaviour
         float height = Screen.height;
         Event inputEvent = Event.current;
         
+        GUISkin skin = GUI.skin;
+        GUI.skin = consoleSkin;
+        
         
         
 
@@ -207,6 +224,7 @@ public class DevConsole : MonoBehaviour
         
         /*
          * Hint menu navigation
+         * don't actually have to apply the input here, only need to capture it before textfields eats it 
          */
 
         if (inputCommand.HasText() == false || hintAmount == 0) {
@@ -239,10 +257,13 @@ public class DevConsole : MonoBehaviour
         
         /*
          * Execute command
+         * Could maybe avoid extra command parsing if we do this after textinput
+         * it wouldn't account for space after argument/command though..
+         * not sure if I like how that is all setup atm
          */
 
         
-        if (inputCommand.HasCommand() && inputEvent.ExecuteCommand()) {
+        if (inputCommand.HasCommand() && inputEvent.ExecuteCommand(false)) {
             ParseInputForCommandsAndArguments(true);
             if (inputCommand.TryExecuteCommand()) {
                 inputEvent.Use();
@@ -262,26 +283,25 @@ public class DevConsole : MonoBehaviour
          * draw console input area
          */
         
-        consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING + height * SCREEN_HEIGHT_PERCENTAGE));
-        consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, height * SCREEN_HEIGHT_PERCENTAGE);
+        consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING + INPUT_WINDOW_HEIGHT));
+        consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, INPUT_WINDOW_HEIGHT);
 
         
         /*
-         * TODO change to box with text drawn inside it to control look better, ex upcoming parameter names
+         * 
+         * doesnt need to update hints & parse commands if input hasn't changed
          */
+        GUI.backgroundColor = new Color32(116,224,255,255);
+        GUI.contentColor = new Color32(200, 200, 200, 255); 
+        
+        Rect inputFieldRect = new (consoleInputDrawPos, consoleInputSize);
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
-        Rect inputWindowRect = new (consoleInputDrawPos, consoleInputSize);
-        inputCommand.inputText = GUI.TextField(inputWindowRect, inputCommand.inputText);
+        inputCommand.inputText = GUI.TextField(inputFieldRect, inputCommand.inputText);
         ParseInputForCommandsAndArguments(false);
         
         
         
         
-        
-        
-        /*
-         * Inputs regarding movement inside the hint window
-         */
         
         if (inputCommand.HasText() && hintAmount > 0) {
             DrawHintWindow(hintAmount);
@@ -289,7 +309,6 @@ public class DevConsole : MonoBehaviour
         else {
             selectedHint = -1;
         }
-
         
         
         
@@ -308,6 +327,10 @@ public class DevConsole : MonoBehaviour
             text.MoveTextEnd();
         }
         
+        /*
+         * Reset gui skin
+         */
+        GUI.skin = skin;
     }
 
 
@@ -327,9 +350,10 @@ public class DevConsole : MonoBehaviour
             maximumHeight += size.y + HINT_HEIGHT_TEXT_PADDING;
         }
         
-        
+        GUI.backgroundColor = new Color32(200,200,200,255);
         Rect hintBackgroundRect = new (consoleInputDrawPos - new Vector2(0, maximumHeight - 2), new Vector2(maximumWidth, maximumHeight));
         GUI.Box(hintBackgroundRect, "");
+        
         Vector2 hintStartPos = hintBackgroundRect.position + new Vector2(0, maximumHeight);
         float stepHeight = maximumHeight / hintAmount;
         for (int i = 0; i < hintAmount; i++) {
@@ -339,11 +363,9 @@ public class DevConsole : MonoBehaviour
             /*
              * better visual selection, only highlight the part that is relevant
              */
-            GUI.enabled = i == selectedHint;
+            GUI.contentColor = i == selectedHint ? new Color32(255, 200, 100, 255) : new Color32(200,200,200,255);
             GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), hint.displayString);
         }
-        
-        GUI.enabled = true;
     }
 
     
@@ -830,6 +852,15 @@ public class DevConsole : MonoBehaviour
         internal int GetArgumentCount() => argumentsAssigned;
         internal InputArgument GetArgumentByIndex(int index) => inputArguments[index];
 
+        internal bool CanExecuteCommand() {
+            if (HasCommand() == false) return false;
+            
+            ParameterInfo[] arguments = Commands[selectedCommand].GetParameters();
+            for (int i = argumentsAssigned; i < arguments.Length; i++) {
+                if (arguments[i].HasDefaultValue == false) return false;
+            }
+            return true;
+        }
         internal bool TryExecuteCommand() {
             List<Object> target = Commands[selectedCommand].GetTargets();
             ParameterInfo[] parameters = Commands[selectedCommand].GetParameters();
