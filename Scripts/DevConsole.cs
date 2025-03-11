@@ -864,6 +864,7 @@ public class DevConsole : MonoBehaviour
             }
             return true;
         }
+        
         internal bool TryExecuteCommand() {
             List<Object> target = Commands[selectedCommand].GetTargets();
             ParameterInfo[] parameters = Commands[selectedCommand].GetParameters();
