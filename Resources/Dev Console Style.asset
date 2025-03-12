@@ -16,3 +16,30 @@ MonoBehaviour:
   InputTextColor: {r: 0.7971698, g: 1, b: 0.8280984, a: 1}
   HintTextColorDefault: {r: 0.5377358, g: 0.5377358, b: 0.5377358, a: 1}
   HintTextColorSelected: {r: 1, g: 0.68725497, b: 0.34117648, a: 1}
+  ConsoleWindowHeight: 36
+  SelectionBumpOffsetAmount: 8
+  SelectionBumpSpeed: 8
+  SelectionBumpCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 2
+      outSlope: 2
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
