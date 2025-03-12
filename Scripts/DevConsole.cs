@@ -17,6 +17,8 @@ using Object = UnityEngine.Object;
 
 
 
+
+
 namespace Jerbo.Tools
 {
 public class DevConsole : MonoBehaviour
@@ -40,7 +42,6 @@ public class DevConsole : MonoBehaviour
     
     const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
-    const float INPUT_WINDOW_HEIGHT = 32f;
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
     const float HINT_HEIGHT_TEXT_PADDING = 2f;
@@ -61,38 +62,45 @@ public class DevConsole : MonoBehaviour
     // Core
     bool hasConsoleBeenInitialized;
     static DevConsoleCache Cache;
+    static DevConsoleStyle Style;
     static readonly CommandData[] Commands = new CommandData[256];
     static int StaticCommandCount;
+    int hintsToDisplay;
     int totalCommandCount;
 
     
     
     // Input
+    /*
+     * Try to replace strings with textbuilder
+     * TextBuilder.Remove(index, length)
+     */
     static readonly StringBuilder TextBuilder = new (256);
     readonly InputCommand inputCommand = new ();
     readonly InputHint[] inputHints = new InputHint[32];
-    int selectedHint;
     int moveMarkerToEnd;
+    int selectedHint;
     bool isActive;
     int setFocus;
 
+    
     // Drawing
     GUISkin consoleSkin;
-    float consoleWidth;
-    float consoleHeight;
     Vector2 consoleInputDrawPos;
     Vector2 consoleInputSize;
-
-
-
+    float selectionBump;
+    
+    
     
     /*
      * Core console functionality
+     *
      */
     
     void InitializeConsole() {
         consoleSkin = Resources.Load<GUISkin>(DEV_CONSOLE_SKIN_PATH);
-        Cache = Resources.Load<DevConsoleCache>(DevConsoleCache.DEV_CONSOLE_CACHE_PATH);
+        Cache = Resources.Load<DevConsoleCache>(DevConsoleCache.ASSET_PATH);
+        Style = Resources.Load<DevConsoleStyle>(DevConsoleStyle.ASSET_PATH);
     }
     
     void LoadStaticCommands() {
@@ -110,7 +118,12 @@ public class DevConsole : MonoBehaviour
         StaticCommandCount = totalCommandCount;
     }
     
+    
+    /*
+     * Reload instance commands when loading scene
+     */
     void LoadInstanceCommands() {
+        totalCommandCount = StaticCommandCount;
         MonoBehaviour[] monoBehavioursInScene = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
 
         foreach (MonoBehaviour scriptBase in monoBehavioursInScene) {
@@ -142,6 +155,25 @@ public class DevConsole : MonoBehaviour
     }
     
     
+    void OnSceneChanged(Scene scene, LoadSceneMode loadSceneMode) {
+        if (isActive == false) return;
+        LoadInstanceCommands();
+    }
+
+
+    /*
+     * Not sure if i like having this callback here, maybe just add it onto recompile callback
+     */
+    void Awake() {
+        SceneManager.sceneLoaded += OnSceneChanged;
+    }
+
+    void OnDestroy() {
+        SceneManager.sceneLoaded -= OnSceneChanged;
+    }
+
+    
+
     /*
      * Console Actions
      */
@@ -170,7 +202,6 @@ public class DevConsole : MonoBehaviour
 
     
     void CloseConsole() {
-        totalCommandCount = StaticCommandCount;
         isActive = false;
         selectedHint = -1;
         GUI.FocusControl(null);
@@ -185,7 +216,7 @@ public class DevConsole : MonoBehaviour
     /*
      * Main logic flow
      */
-    
+
     
     void OnGUI() {
         Event inputEvent = Event.current;
@@ -205,8 +236,6 @@ public class DevConsole : MonoBehaviour
         DrawConsole();
     }
 
-
-    
     
     void DrawConsole() {
         float width = Screen.width;
@@ -215,45 +244,55 @@ public class DevConsole : MonoBehaviour
         
         GUISkin skin = GUI.skin;
         GUI.skin = consoleSkin;
-        
-        
-        
-
-        int hintAmount = GenerateSuggestionHints();
-        
+        selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectionBumpSpeed * Time.unscaledDeltaTime);
+        bool windowHasFocus = GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID;
         
         /*
          * Hint menu navigation
          * don't actually have to apply the input here, only need to capture it before textfields eats it 
          */
-
-        if (inputCommand.HasText() == false || hintAmount == 0) {
-            selectedHint = -1;
+        hintsToDisplay = GenerateSuggestionHints();
+        if (hintsToDisplay > 1) {
+            Array.Sort(inputHints, 0, hintsToDisplay);
         }
         
-        if (GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID && hintAmount > 0) {
+        if (inputCommand.HasText() == false || hintsToDisplay == 0) {
+            selectedHint = -1;
+        }
+
+        if (windowHasFocus && hintsToDisplay > 0) {
             if (selectedHint != -1) {
-                selectedHint = Mathf.Clamp(selectedHint, 0, hintAmount - 1);
-                
+                selectedHint = Mathf.Clamp(selectedHint, 0, hintsToDisplay - 1);
+
                 if (inputEvent.InsertHint()) {
                     inputCommand.UseHint(inputHints[selectedHint]);
                     moveMarkerToEnd = 2;
                 }
             }
-            
+
             if (inputEvent.NavigateDown()) {
                 selectedHint -= 1;
-                if (selectedHint < 0) selectedHint = hintAmount - 1;
+                if (selectedHint < 0) selectedHint = hintsToDisplay - 1;
             }
             else if (inputEvent.NavigateUp()) {
                 selectedHint += 1;
-                selectedHint %= hintAmount;
+                selectedHint %= hintsToDisplay;
             }
         }
-        
-        
-        
-        
+
+
+
+
+
+        if (inputCommand.HasCommand() && inputEvent.ExecuteCommand(false)) {
+            if (inputCommand.TryExecuteCommand()) {
+                inputEvent.Use();
+                inputCommand.Clear();
+                moveMarkerToEnd = 2;
+                hintsToDisplay = 0;
+                selectedHint = -1;
+            }
+        }
         
         /*
          * Execute command
@@ -263,48 +302,35 @@ public class DevConsole : MonoBehaviour
          */
 
         
-        if (inputCommand.HasCommand() && inputEvent.ExecuteCommand(false)) {
-            ParseInputForCommandsAndArguments(true);
-            if (inputCommand.TryExecuteCommand()) {
-                inputEvent.Use();
-                inputCommand.Clear();
-                moveMarkerToEnd = 2;
-                hintAmount = 0;
-                selectedHint = -1;
-            }
-        }
         
         
         
         
-         
-            
         /*
          * draw console input area
          */
         
-        consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING + INPUT_WINDOW_HEIGHT));
-        consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, INPUT_WINDOW_HEIGHT);
+        consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING + Style.ConsoleWindowHeight));
+        consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, Style.ConsoleWindowHeight);
 
         
         /*
          * 
-         * doesnt need to update hints & parse commands if input hasn't changed
+         * doesn't need to update hints & parse commands if input hasn't changed
          */
-        GUI.backgroundColor = new Color32(116,224,255,255);
-        GUI.contentColor = new Color32(200, 200, 200, 255); 
+        GUI.backgroundColor = Style.BorderColor;
+        GUI.contentColor = Style.InputTextColor; 
         
         Rect inputFieldRect = new (consoleInputDrawPos, consoleInputSize);
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
-        inputCommand.inputText = GUI.TextField(inputFieldRect, inputCommand.inputText);
-        ParseInputForCommandsAndArguments(false);
+        inputCommand.inputText = GUI.TextField(inputFieldRect, inputCommand.inputText); 
+        ParseInputForCommandsAndArguments(true);
+           
         
         
         
-        
-        
-        if (inputCommand.HasText() && hintAmount > 0) {
-            DrawHintWindow(hintAmount);
+        if (inputCommand.HasText() && hintsToDisplay > 0) {
+            DrawHintWindow(hintsToDisplay);
         }
         else {
             selectedHint = -1;
@@ -334,7 +360,6 @@ public class DevConsole : MonoBehaviour
     }
 
 
-
     void DrawHintWindow(int hintAmount) {
         /*
          * Draw Command Hints
@@ -349,38 +374,39 @@ public class DevConsole : MonoBehaviour
             maximumWidth = Mathf.Max(size.x, maximumWidth);
             maximumHeight += size.y + HINT_HEIGHT_TEXT_PADDING;
         }
-        
-        GUI.backgroundColor = new Color32(200,200,200,255);
-        Rect hintBackgroundRect = new (consoleInputDrawPos - new Vector2(0, maximumHeight - 2), new Vector2(maximumWidth, maximumHeight));
+
+        GUI.backgroundColor = Style.BorderColor;
+        Rect hintBackgroundRect = new (consoleInputDrawPos - new Vector2(0, maximumHeight + HEIGHT_SPACING), new Vector2(maximumWidth, maximumHeight));
         GUI.Box(hintBackgroundRect, "");
         
-        Vector2 hintStartPos = hintBackgroundRect.position + new Vector2(0, maximumHeight);
+        Vector2 hintStartPos = hintBackgroundRect.position;
         float stepHeight = maximumHeight / hintAmount;
         for (int i = 0; i < hintAmount; i++) {
             InputHint hint = inputHints[i];
-            Vector2 pos = hintStartPos - new Vector2(0, (i+1) * stepHeight);
+            bool isSelected = i == selectedHint;
+            
+            float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectionBumpOffsetAmount : 0;
+            Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
             
             /*
              * better visual selection, only highlight the part that is relevant
              */
-            GUI.contentColor = i == selectedHint ? new Color32(255, 200, 100, 255) : new Color32(200,200,200,255);
+            GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
             GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), hint.displayString);
         }
     }
 
     
-
     int GenerateSuggestionHints() {
         int hintsFound = 0;
 
         if (inputCommand.HasText() == false) {
             return hintsFound;
         }
-
         
         // TODO wanna add sorting based on how many matches we have, best result at the top
         // Fill with commands that match
-        if (inputCommand.HasCommand() == false) {
+        if (inputCommand.DisplayCommandHints()) {
             string[] inputWords = inputCommand.inputText.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
            
             for (int i = 0; i < totalCommandCount; i++) {
@@ -548,10 +574,15 @@ public class DevConsole : MonoBehaviour
         // inputHints[hintsFound++].SetHint(TextBuilder);
         return hintsFound;
     }
+    
 
-
-
-
+    
+    /*
+     * TODO remove 'ignoreSpacingRequirement' bool, it was used to keep hints active after first matching command was found but
+     * the logic has been changed to hints checking if they should keep displaying or not
+     * 03-12 -> logic inside InputCommand.DisplayCommandHints()
+     */
+    
     void ParseInputForCommandsAndArguments(bool ignoreSpacingRequirement) {
         inputCommand.RemoveSelection();
         if (inputCommand.HasText() == false) return;
@@ -584,7 +615,7 @@ public class DevConsole : MonoBehaviour
             /*
              * Only apply command if we have a space afterward marking the input as done
              */
-            if (inputText.Length > longestCommandName && inputText[longestCommandName] == SPACE) {
+            if (ignoreSpacingRequirement || (inputText.Length > longestCommandName && inputText[longestCommandName] == SPACE)) {
                 inputText = inputText.Remove(0, longestCommandName);
                 inputCommand.SelectCommand(matchingCommandIndex);
             }
@@ -629,8 +660,6 @@ public class DevConsole : MonoBehaviour
                 
                 continue;
             }
-            
-            
             
             
             /*
@@ -831,6 +860,18 @@ public class DevConsole : MonoBehaviour
         internal bool HasText() => string.IsNullOrEmpty(inputText) == false;
         internal bool HasCommand() => selectedCommand != -1;
 
+        internal bool DisplayCommandHints() {
+            return selectedCommand == -1 || Commands[selectedCommand].GetDisplayName().Length == inputText.Length;
+        }
+
+        internal bool DisplayPreviousArgumentHints() {
+            if (HasCommand() == false) return false;
+            if (argumentsAssigned > 0) {
+                return inputText[^1] != SPACE;
+            }
+
+            return false;
+        }
         /*
          * Don't break existing text when applying hint!
          * Applying the visual string, assigning matching command + argument is done later in the update loop
@@ -911,7 +952,7 @@ public class DevConsole : MonoBehaviour
             this.argumentValue = argumentValue;
         }
     }
-
+    
     
     struct CommandData {
         string displayName;
@@ -952,9 +993,10 @@ public class DevConsole : MonoBehaviour
     }
 
 
-    struct InputHint {
+    struct InputHint : IComparable<InputHint> {
         internal string displayString;
         internal string outputString;
+        IComparable<InputHint> comparableImplementation;
 
         // Having 2 strings for displaying commands, the visual adds the parameter names, for arguments both are the same
         internal void SetHint(StringBuilder builder, string outputValue) {
@@ -965,6 +1007,9 @@ public class DevConsole : MonoBehaviour
         internal void SetHint(StringBuilder builder) {
             displayString = builder.ToString();
             outputString = builder.ToString();
+        }
+        public int CompareTo(InputHint other) {
+            return string.Compare(displayString, other.displayString, StringComparison.InvariantCultureIgnoreCase);
         }
     }
 }

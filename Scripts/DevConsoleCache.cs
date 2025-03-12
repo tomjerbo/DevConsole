@@ -11,7 +11,7 @@ public class DevConsoleCache : ScriptableObject
         /*
          * Cant use assetdatabase in builds, need a way to load/cache assets
          */
-        DevConsoleCache cache = Resources.Load<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
+        DevConsoleCache cache = Resources.Load<DevConsoleCache>(ASSET_PATH);
     
         
         string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}", SEARCH_FOLDERS);
@@ -44,12 +44,12 @@ public class DevConsoleCache : ScriptableObject
         //     cache.ScenePaths[i] = path;
         // }
 
-        Debug.Log($"DevConsole Cached -> {cache.AssetReferences.Length} ScriptableObjects & {cache.SceneNames.Length} Scenes");
+        // Debug.Log($"DevConsole Cached -> {cache.AssetReferences.Length} ScriptableObjects & {cache.SceneNames.Length} Scenes");
     }
 #endif
 
     static string[] SEARCH_FOLDERS = { "Assets" };
-    public const string DEV_CONSOLE_CACHE_PATH = "Dev Console Cache";
+    public const string ASSET_PATH = "Dev Console Cache";
     [HideInInspector] public ScriptableObject[] AssetReferences;
     [HideInInspector] public string[] AssetNames;
     [HideInInspector] public string[] SceneNames;
