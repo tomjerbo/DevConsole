@@ -272,10 +272,12 @@ public class DevConsole : MonoBehaviour
 
             if (inputEvent.NavigateDown()) {
                 selectedHint -= 1;
+                selectionBump = 0;
                 if (selectedHint < 0) selectedHint = hintsToDisplay - 1;
             }
             else if (inputEvent.NavigateUp()) {
                 selectedHint += 1;
+                selectionBump = 0;
                 selectedHint %= hintsToDisplay;
             }
         }
@@ -319,12 +321,13 @@ public class DevConsole : MonoBehaviour
          * doesn't need to update hints & parse commands if input hasn't changed
          */
         GUI.backgroundColor = Style.BorderColor;
-        GUI.contentColor = Style.InputTextColor; 
+        
+        GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.InputValidCommand : Style.InputTextDefault;
         
         Rect inputFieldRect = new (consoleInputDrawPos, consoleInputSize);
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
         inputCommand.inputText = GUI.TextField(inputFieldRect, inputCommand.inputText); 
-        ParseInputForCommandsAndArguments(true);
+        ParseInputForCommandsAndArguments(false);
            
         
         
@@ -375,6 +378,7 @@ public class DevConsole : MonoBehaviour
             maximumHeight += size.y + HINT_HEIGHT_TEXT_PADDING;
         }
 
+        maximumWidth += Style.SelectionBumpOffsetAmount;
         GUI.backgroundColor = Style.BorderColor;
         Rect hintBackgroundRect = new (consoleInputDrawPos - new Vector2(0, maximumHeight + HEIGHT_SPACING), new Vector2(maximumWidth, maximumHeight));
         GUI.Box(hintBackgroundRect, "");

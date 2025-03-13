@@ -8,7 +8,8 @@ namespace Jerbo.Tools {
         
         [Tab("Colors", Tab.Color.Yellow)]
         public Color BorderColor = Color.white;
-        public Color InputTextColor = Color.white;
+        public Color InputTextDefault = Color.white;
+        public Color InputValidCommand = Color.white;
         public Color HintTextColorDefault = Color.white;
         public Color HintTextColorSelected = Color.white;
 
