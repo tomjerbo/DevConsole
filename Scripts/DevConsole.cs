@@ -75,6 +75,7 @@ public class DevConsole : MonoBehaviour
     static readonly GUIContent[] hintContent = new GUIContent[32];
     static readonly Type SO_TYPE = typeof(ScriptableObject);
     static readonly Type COMMAND_TYPE = typeof(CommandData);
+    static int hintArgumentIndex = -1;
     static int StaticCommandCount;
     int hintsToDisplay;
     int totalCommandCount;
@@ -444,6 +445,7 @@ public class DevConsole : MonoBehaviour
         // TODO wanna add sorting based on how many matches we have, best result at the top
         // Fill with commands that match
         if (inputCommand.DisplayCommandHints()) {
+            hintArgumentIndex = -1;
             string[] inputWords = inputCommand.inputText.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
            
             for (int i = 0; i < totalCommandCount; i++) {
@@ -477,7 +479,10 @@ public class DevConsole : MonoBehaviour
         int argumentCount = inputCommand.GetArgumentCount();
         int commandIndex = inputCommand.GetCommandIndex();
 
-        if (inputCommand.HasCommand() == false || argumentCount >= Commands[commandIndex].GetParameterCount()) {
+        /*
+         * already found all the arguments possible
+         */
+        if (argumentCount >= Commands[commandIndex].GetParameterCount()) {
             return hintsFound;
         }
 
@@ -487,8 +492,17 @@ public class DevConsole : MonoBehaviour
         string inputText = inputCommand.inputText;
         inputText = inputText.Remove(0, Commands[commandIndex].GetDisplayName().Length).TrimStart(SPACE);
         for (int i = 0; i < argumentCount; i++) {
-            inputText = inputText.Remove(0, inputCommand.GetArgumentByIndex(i).displayName.Length).TrimStart(SPACE);
+            int argumentLength = inputCommand.GetArgumentByIndex(i).displayName.Length;
+            if (i == argumentCount - 1 && argumentLength == inputText.Length) {
+                argumentCount--;
+            }
+            else {
+                inputText = inputText.Remove(0, argumentLength).TrimStart(SPACE);
+            }
         }
+
+        hintArgumentIndex = argumentCount;
+        
         
         string[] inputWithoutMatches = inputText.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
         
@@ -862,24 +876,15 @@ public class DevConsole : MonoBehaviour
             if (HasCommand()) {
                 TextBuilder.Append($"{Commands[selectedCommand].GetDisplayName()}{SPACE}");
                 
-                if (argumentsAssigned == 0) {
-                    TextBuilder.Append($"{hintContent[indexOfHint].text}{SPACE}");
-                    inputText = TextBuilder.ToString();
-                    return;
-                }
-                
                 /*
                  * Check if last argument is same type, if true then check if value matches
                  * if match, only write hint value? not sure which one atm
                  * if NO match, write the argument + hint value
                  */
                 
-                for (int i = 0; i < argumentsAssigned - 1; i++) {
+                for (int i = 0; i < argumentsAssigned; i++) {
+                    if (hintArgumentIndex == i) break;
                     TextBuilder.Append($"{inputArguments[i].displayName}{SPACE}");
-                }
-
-                if (inputText[^1] == SPACE) {
-                    TextBuilder.Append($"{inputArguments[argumentsAssigned-1].displayName}{SPACE}");
                 }
 
                 TextBuilder.Append($"{hintContent[indexOfHint].text}{SPACE}");
