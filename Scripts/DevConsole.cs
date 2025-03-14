@@ -18,6 +18,8 @@ using Object = UnityEngine.Object;
 /*
  * ----------- TODO LIST ----------------
  * Check how generic parameters are handled
+ * Command history!
+ *
  * 
  */
 
