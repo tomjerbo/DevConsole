@@ -265,6 +265,7 @@ public class DevConsole : MonoBehaviour
                 selectedHint = Mathf.Clamp(selectedHint, 0, hintsToDisplay - 1);
 
                 if (inputEvent.InsertHint()) {
+                    ParseInputForCommandsAndArguments(true);
                     inputCommand.UseHint(inputHints[selectedHint]);
                     moveMarkerToEnd = 2;
                 }
@@ -328,7 +329,7 @@ public class DevConsole : MonoBehaviour
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
         inputCommand.inputText = GUI.TextField(inputFieldRect, inputCommand.inputText); 
         ParseInputForCommandsAndArguments(false);
-           
+        
         
         
         

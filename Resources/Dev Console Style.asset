@@ -12,8 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b185ae0910444e47b115db3a4df3937e, type: 3}
   m_Name: Dev Console Style
   m_EditorClassIdentifier: 
-  BorderColor: {r: 1, g: 1, b: 1, a: 1}
-  InputTextColor: {r: 0.7971698, g: 1, b: 0.8280984, a: 1}
+  BorderColor: {r: 1, g: 0.52380955, b: 0, a: 1}
+  InputTextDefault: {r: 0.735849, g: 0.735849, b: 0.735849, a: 1}
+  InputValidCommand: {r: 0.6745098, g: 1, b: 0.57254905, a: 1}
   HintTextColorDefault: {r: 0.5377358, g: 0.5377358, b: 0.5377358, a: 1}
   HintTextColorSelected: {r: 1, g: 0.68725497, b: 0.34117648, a: 1}
   ConsoleWindowHeight: 36
