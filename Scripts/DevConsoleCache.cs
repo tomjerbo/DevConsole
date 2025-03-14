@@ -52,8 +52,9 @@ public class DevConsoleCache : ScriptableObject
     public const string ASSET_PATH = "Dev Console Cache";
     [HideInInspector] public ScriptableObject[] AssetReferences;
     [HideInInspector] public string[] AssetNames;
-    [HideInInspector] public string[] SceneNames;
-    [HideInInspector] public string[] ScenePaths;
+    // [HideInInspector] public string[] SceneNames;
+    // [HideInInspector] public string[] ScenePaths;
+    
     
     // const char PATH_SPLITTER = '/';
     // const char ASSET_EXTENSION_SPLITTER = '.';

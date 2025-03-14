@@ -15,7 +15,11 @@ using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
 
 
-
+/*
+ * ----------- TODO LIST ----------------
+ * Check how generic parameters are handled
+ * 
+ */
 
 
 
@@ -54,6 +58,8 @@ public class DevConsole : MonoBehaviour
     
     
     
+    
+    
     /*
      * Instanced
      */
@@ -64,6 +70,11 @@ public class DevConsole : MonoBehaviour
     static DevConsoleCache Cache;
     static DevConsoleStyle Style;
     static readonly CommandData[] Commands = new CommandData[256];
+    static readonly int[] hintIndex = new int[32];
+    static readonly Type[] hintType = new Type[32];
+    static readonly GUIContent[] hintContent = new GUIContent[32];
+    static readonly Type SO_TYPE = typeof(ScriptableObject);
+    static readonly Type COMMAND_TYPE = typeof(CommandData);
     static int StaticCommandCount;
     int hintsToDisplay;
     int totalCommandCount;
@@ -77,7 +88,6 @@ public class DevConsole : MonoBehaviour
      */
     static readonly StringBuilder TextBuilder = new (256);
     readonly InputCommand inputCommand = new ();
-    readonly InputHint[] inputHints = new InputHint[32];
     int moveMarkerToEnd;
     int selectedHint;
     bool isActive;
@@ -97,10 +107,16 @@ public class DevConsole : MonoBehaviour
      *
      */
     
+    
+    
     void InitializeConsole() {
         consoleSkin = Resources.Load<GUISkin>(DEV_CONSOLE_SKIN_PATH);
         Cache = Resources.Load<DevConsoleCache>(DevConsoleCache.ASSET_PATH);
         Style = Resources.Load<DevConsoleStyle>(DevConsoleStyle.ASSET_PATH);
+        Array.Fill(hintType, COMMAND_TYPE);
+        for (int i = 0; i < hintContent.Length; i++) {
+            hintContent[i] = new GUIContent();
+        }
     }
     
     void LoadStaticCommands() {
@@ -154,7 +170,6 @@ public class DevConsole : MonoBehaviour
         return false;
     }
     
-    
     void OnSceneChanged(Scene scene, LoadSceneMode loadSceneMode) {
         if (isActive == false) return;
         LoadInstanceCommands();
@@ -191,6 +206,11 @@ public class DevConsole : MonoBehaviour
         if (hasConsoleBeenInitialized == false) {
             hasConsoleBeenInitialized = true;
             
+            /*
+             * Can this be async? there is no reasonable situation where you should be able to
+             * execute a command before the async is done.
+             * even then i can just queue the command and pop them once it's loaded and done if you are using history
+             */
             InitializeConsole();
             LoadStaticCommands();
             LoadInstanceCommands();
@@ -249,11 +269,23 @@ public class DevConsole : MonoBehaviour
         
         /*
          * Hint menu navigation
-         * don't actually have to apply the input here, only need to capture it before textfields eats it 
+         * don't actually have to apply the input here, only need to capture it before textfields eats it
+         * can also generate hints after input field to get the most up to date one
+         *
+         * Input -> Execute Command 
+         * Input -> Hints & Navigation
+         * Draw -> Console Field
+         * If Changed -> Generate hints
+         * Draw -> Hints
+         * Input -> Execute navigation
          */
-        hintsToDisplay = GenerateSuggestionHints();
+        
+        hintsToDisplay = ParseInputForHints();
         if (hintsToDisplay > 1) {
-            Array.Sort(inputHints, 0, hintsToDisplay);
+            /*
+             * how do i sort the array when i have 2 more that needs to follow the same index layout?
+             */
+            // Array.Sort(hintContent, 0, hintsToDisplay);
         }
         
         if (inputCommand.HasText() == false || hintsToDisplay == 0) {
@@ -265,8 +297,8 @@ public class DevConsole : MonoBehaviour
                 selectedHint = Mathf.Clamp(selectedHint, 0, hintsToDisplay - 1);
 
                 if (inputEvent.InsertHint()) {
-                    ParseInputForCommandsAndArguments(true);
-                    inputCommand.UseHint(inputHints[selectedHint]);
+                    ParseInputForCommandsAndArguments();
+                    inputCommand.UseHint(selectedHint);
                     moveMarkerToEnd = 2;
                 }
             }
@@ -327,8 +359,10 @@ public class DevConsole : MonoBehaviour
         
         Rect inputFieldRect = new (consoleInputDrawPos, consoleInputSize);
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
+        
+        
         inputCommand.inputText = GUI.TextField(inputFieldRect, inputCommand.inputText); 
-        ParseInputForCommandsAndArguments(false);
+        ParseInputForCommandsAndArguments();
         
         
         
@@ -371,10 +405,9 @@ public class DevConsole : MonoBehaviour
         
         float maximumWidth = 0;
         float maximumHeight = 0;
-        GUIContent sizeHelper = new ();
+        
         for (int i = 0; i < hintAmount; i++) {
-            sizeHelper.text = inputHints[i].displayString;
-            Vector2 size = consoleSkin.label.CalcSize(sizeHelper);
+            Vector2 size = consoleSkin.label.CalcSize(hintContent[i]);
             maximumWidth = Mathf.Max(size.x, maximumWidth);
             maximumHeight += size.y + HINT_HEIGHT_TEXT_PADDING;
         }
@@ -387,7 +420,6 @@ public class DevConsole : MonoBehaviour
         Vector2 hintStartPos = hintBackgroundRect.position;
         float stepHeight = maximumHeight / hintAmount;
         for (int i = 0; i < hintAmount; i++) {
-            InputHint hint = inputHints[i];
             bool isSelected = i == selectedHint;
             
             float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectionBumpOffsetAmount : 0;
@@ -397,12 +429,12 @@ public class DevConsole : MonoBehaviour
              * better visual selection, only highlight the part that is relevant
              */
             GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
-            GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), hint.displayString);
+            GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), hintContent[i]);
         }
-    }
+    } 
 
     
-    int GenerateSuggestionHints() {
+    int ParseInputForHints() {
         int hintsFound = 0;
 
         if (inputCommand.HasText() == false) {
@@ -425,11 +457,10 @@ public class DevConsole : MonoBehaviour
                 }
 
                 if (matchingHint) {
-                    TextBuilder.Clear();
-                    TextBuilder.Append(Commands[i].GetFullHint());
-                    TextBuilder.Append(SPACE);
-
-                    inputHints[hintsFound++].SetHint(TextBuilder, Commands[i].GetDisplayName());
+                    hintContent[hintsFound].text = Commands[i].GetFullHint();
+                    hintIndex[hintsFound] = i;
+                    hintType[hintsFound] = COMMAND_TYPE;
+                    hintsFound++;
                 }
             }
 
@@ -469,13 +500,13 @@ public class DevConsole : MonoBehaviour
          */
 
         if (argumentType == typeof(bool)) {
-            TextBuilder.Clear();
-            TextBuilder.Append(bool.TrueString);
-            inputHints[hintsFound++].SetHint(TextBuilder);
-
-            TextBuilder.Clear();
-            TextBuilder.Append(bool.FalseString);
-            inputHints[hintsFound++].SetHint(TextBuilder);
+            hintContent[hintsFound].text = bool.TrueString;
+            hintType[hintsFound] = argumentType;
+            hintsFound++;
+            
+            hintContent[hintsFound].text = bool.FalseString;
+            hintType[hintsFound] = argumentType;
+            hintsFound++;
             return hintsFound;
         }
 
@@ -489,69 +520,39 @@ public class DevConsole : MonoBehaviour
 
         if (argumentType.IsEnum) {
             string[] namesInsideEnum = argumentType.GetEnumNames();
-            foreach (string enumValueName in namesInsideEnum) {
+            for (int i = 0; i < namesInsideEnum.Length; i++) {
                 bool containsWord = true;
-                foreach (string inputWord in inputWithoutMatches) {
-                    if (enumValueName.Contains(inputWord, StringComparison.InvariantCultureIgnoreCase)) continue;
-
-                    containsWord = false;
-                    break;
+                for (int wordIndex = 0; wordIndex < inputWithoutMatches.Length; wordIndex++) {
+                    if (namesInsideEnum[i].Contains(inputWithoutMatches[wordIndex], StringComparison.InvariantCultureIgnoreCase) == false) {
+                        containsWord = false;
+                        break;
+                    }
                 }
 
                 if (containsWord) {
-                    TextBuilder.Clear();
-                    TextBuilder.Append(enumValueName);
-                    inputHints[hintsFound++].SetHint(TextBuilder);
+                    hintContent[hintsFound].text = namesInsideEnum[i];
+                    hintIndex[hintsFound] = i;
+                    hintType[hintsFound] = argumentType;
+                    hintsFound++;
                 }
             }
 
             return hintsFound;
         }
-
-
-        
-        
-        /*
-         * Scenes
-         * Disabled for now, scenes doesn't want to play nice, just make a method that takes in an int for buildIndex
-         */
-
-        if (argumentType == typeof(Scene) && false) {
-            for (int i = 0; i < Cache.SceneNames.Length; i++) {
-                string sceneName = Cache.SceneNames[i];
-                bool containsWord = true;
-                foreach (string word in inputWithoutMatches) {
-                    if (sceneName.Contains(word, StringComparison.InvariantCultureIgnoreCase)) continue;
-
-                    containsWord = false;
-                    break;
-                }
-
-                if (containsWord) {
-                    TextBuilder.Clear();
-                    TextBuilder.Append(sceneName);
-                    inputHints[hintsFound++].SetHint(TextBuilder);
-                }
-            }
-
-            return hintsFound;
-        }
-
-
         
         
         /*
          * ScriptableObjects
          */
 
-        if (typeof(ScriptableObject).IsAssignableFrom(argumentType)) {
-            foreach (ScriptableObject asset in Cache.AssetReferences) {
-                
+        if (SO_TYPE.IsAssignableFrom(argumentType)) {
+            for (int i = 0; i < Cache.AssetReferences.Length; i++) {
+                ScriptableObject asset = Cache.AssetReferences[i];
                 /*
                  * Asset is scriptableObject but has wrong inheritance type
                  */
                 if (argumentType.IsAssignableFrom(asset.GetType()) == false) continue;
-                
+
                 bool containsWord = true;
                 foreach (string word in inputWithoutMatches) {
                     if (asset.name.Contains(word, StringComparison.InvariantCultureIgnoreCase)) continue;
@@ -561,9 +562,10 @@ public class DevConsole : MonoBehaviour
                 }
 
                 if (containsWord) {
-                    TextBuilder.Clear();
-                    TextBuilder.Append(asset.name);
-                    inputHints[hintsFound++].SetHint(TextBuilder);
+                    hintContent[hintsFound].text = asset.name;
+                    hintIndex[hintsFound] = i;
+                    hintType[hintsFound] = SO_TYPE;
+                    hintsFound++;
                 }
             }
 
@@ -588,9 +590,13 @@ public class DevConsole : MonoBehaviour
      * 03-12 -> logic inside InputCommand.DisplayCommandHints()
      */
     
-    void ParseInputForCommandsAndArguments(bool ignoreSpacingRequirement) {
+    void ParseInputForCommandsAndArguments() {
         inputCommand.RemoveSelection();
         if (inputCommand.HasText() == false) return;
+        /*
+         * int checkIndex = 0;
+         * can remove string and use [checkIndex..^1]
+         */
         string inputText = inputCommand.inputText;
         
         
@@ -617,10 +623,7 @@ public class DevConsole : MonoBehaviour
          * the first one will get selected, maybe add something that waits until whitespace to hide hint menu?
          */
         if (matchingCommandIndex != -1) {
-            /*
-             * Only apply command if we have a space afterward marking the input as done
-             */
-            if (ignoreSpacingRequirement || (inputText.Length > longestCommandName && inputText[longestCommandName] == SPACE)) {
+            if (inputText.Length >= longestCommandName) {
                 inputText = inputText.Remove(0, longestCommandName);
                 inputCommand.SelectCommand(matchingCommandIndex);
             }
@@ -642,6 +645,7 @@ public class DevConsole : MonoBehaviour
          */
 
         
+        
         int paramCount = Commands[matchingCommandIndex].GetParameterCount();
         for (int i = 0; i < paramCount; i++) {
             // We remove parts of the string for matching arguments so if we get to a loop when it's empty, were done!
@@ -654,11 +658,11 @@ public class DevConsole : MonoBehaviour
              */
             
             if (argumentType == typeof(bool)) {
-                if (inputText.StartsWith(bool.TrueString + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase)) {
+                if (inputText.StartsWith(bool.TrueString, StringComparison.InvariantCultureIgnoreCase)) {
                     inputText = inputText.Remove(0, bool.TrueString.Length);
                     inputCommand.SetArgument(bool.TrueString, true);
                 }
-                else if (inputText.StartsWith(bool.FalseString + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase)) {
+                else if (inputText.StartsWith(bool.FalseString, StringComparison.InvariantCultureIgnoreCase)) {
                     inputText = inputText.Remove(0, bool.FalseString.Length);
                     inputCommand.SetArgument(bool.FalseString, false);
                 }
@@ -678,7 +682,7 @@ public class DevConsole : MonoBehaviour
                 int matchingEnumIndex = -1;
 
                 for (int enumIndex = 0; enumIndex < namesInsideEnum.Length; enumIndex++) {
-                    if (inputText.StartsWith(namesInsideEnum[enumIndex] + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase) == false) 
+                    if (inputText.StartsWith(namesInsideEnum[enumIndex], StringComparison.InvariantCultureIgnoreCase) == false) 
                         continue;
                     
                     int enumLength = namesInsideEnum[enumIndex].Length;
@@ -697,50 +701,16 @@ public class DevConsole : MonoBehaviour
             }
             
             
-            
-            
-            
-            /*
-             * Scenes
-             *
-             * Disabled for now, scenes doesn't want to play nice, just make a method that takes in an int for buildIndex
-             */
-
-            if (argumentType == typeof(Scene) && false) {
-                int longestSceneMatch = -1;
-                int matchingSceneIndex = -1;
-                for (int sceneIndex = 0; sceneIndex < Cache.SceneNames.Length; sceneIndex++) {
-                    if (inputText.StartsWith(Cache.SceneNames[sceneIndex] + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase) == false) 
-                        continue;
-                    
-                    int nameLength = Cache.SceneNames[sceneIndex].Length;
-                    if (nameLength > longestSceneMatch) {
-                        longestSceneMatch = nameLength;
-                        matchingSceneIndex = sceneIndex;
-                    }
-                }
-
-                if (matchingSceneIndex != -1) {
-                    inputText = inputText.Remove(0, longestSceneMatch);
-                    inputCommand.SetArgument(Cache.SceneNames[matchingSceneIndex], Cache.ScenePaths[matchingSceneIndex]);
-                }
-                
-                continue;
-            }
-            
-            
-            
-            
             /*
              * ScriptableObjects
              */
 
-            if (typeof(ScriptableObject).IsAssignableFrom(argumentType)) {
+            if (SO_TYPE.IsAssignableFrom(argumentType)) {
                 int longestAssetMatch = -1;
                 int matchingAssetIndex = -1;
 
                 for (int assetIndex = 0; assetIndex < Cache.AssetReferences.Length; assetIndex++) {
-                    if (inputText.StartsWith(Cache.AssetNames[assetIndex] + (ignoreSpacingRequirement ? string.Empty : SPACE), StringComparison.InvariantCultureIgnoreCase) == false)
+                    if (inputText.StartsWith(Cache.AssetNames[assetIndex], StringComparison.InvariantCultureIgnoreCase) == false)
                         continue;
 
                     int nameLength = Cache.AssetNames[assetIndex].Length;
@@ -789,7 +759,7 @@ public class DevConsole : MonoBehaviour
                 }
 
                 if (validStringLength != -1) {
-                    if (ignoreSpacingRequirement || (inputText.Length > validStringLength && inputText[validStringLength] == SPACE)) {
+                    if (inputText.Length >= validStringLength) {
                         string argumentString = inputText[..validStringLength];
                         inputText = inputText.Remove(0, validStringLength);
                         inputCommand.SetArgument(argumentString, argumentString[1..^1]);
@@ -821,7 +791,7 @@ public class DevConsole : MonoBehaviour
                 }
 
                 if (stringToValue != null) {
-                    if (ignoreSpacingRequirement || (inputText.Length > firstPossibleValue.Length && inputText[firstPossibleValue.Length] == SPACE)) {
+                    if (inputText.Length >= firstPossibleValue.Length) {
                         inputText = inputText.Remove(0, firstPossibleValue.Length);
                         inputCommand.SetArgument(firstPossibleValue, stringToValue);
                     }
@@ -848,7 +818,6 @@ public class DevConsole : MonoBehaviour
             selectedCommand = -1;
             argumentsAssigned = 0;
         }
-
         internal void RemoveSelection() {
             selectedCommand = -1;
             argumentsAssigned = 0;
@@ -864,43 +833,68 @@ public class DevConsole : MonoBehaviour
         }
         internal bool HasText() => string.IsNullOrEmpty(inputText) == false;
         internal bool HasCommand() => selectedCommand != -1;
-
         internal bool DisplayCommandHints() {
             return selectedCommand == -1 || Commands[selectedCommand].GetDisplayName().Length == inputText.Length;
         }
-
-        internal bool DisplayPreviousArgumentHints() {
-            if (HasCommand() == false) return false;
-            if (argumentsAssigned > 0) {
-                return inputText[^1] != SPACE;
-            }
-
-            return false;
-        }
+        
         /*
          * Don't break existing text when applying hint!
          * Applying the visual string, assigning matching command + argument is done later in the update loop
          * so we are not assigning the actual command or argument here, only inputting a string that the parser will
          * recognize later!
          */
-        internal void UseHint(InputHint inputHint) {
+        internal void UseHint(int indexOfHint) {
             TextBuilder.Clear();
-            if (HasCommand()) {
-                TextBuilder.Append($"{Commands[selectedCommand].GetDisplayName()} ");
-
-                for (int i = 0; i < argumentsAssigned; i++) {
-                    TextBuilder.Append($"{inputArguments[i].displayName} ");
-                }
-            }
             
-            TextBuilder.Append($"{inputHint.outputString} ");
-            inputText = TextBuilder.ToString();
+            /*
+             * applying command hint
+             */
+            if (hintType[indexOfHint] == COMMAND_TYPE) {
+                TextBuilder.Append($"{Commands[hintIndex[indexOfHint]].GetDisplayName()}{SPACE}");
+                inputText = TextBuilder.ToString();
+                return;
+            }
+
+            
+            /*
+             * applying argument hint
+             */
+            if (HasCommand()) {
+                TextBuilder.Append($"{Commands[selectedCommand].GetDisplayName()}{SPACE}");
+                
+                if (argumentsAssigned == 0) {
+                    TextBuilder.Append($"{hintContent[indexOfHint].text}{SPACE}");
+                    inputText = TextBuilder.ToString();
+                    return;
+                }
+                
+                /*
+                 * Check if last argument is same type, if true then check if value matches
+                 * if match, only write hint value? not sure which one atm
+                 * if NO match, write the argument + hint value
+                 */
+                
+                for (int i = 0; i < argumentsAssigned - 1; i++) {
+                    TextBuilder.Append($"{inputArguments[i].displayName}{SPACE}");
+                }
+
+                if (inputText[^1] == SPACE) {
+                    TextBuilder.Append($"{inputArguments[argumentsAssigned-1].displayName}{SPACE}");
+                }
+
+                TextBuilder.Append($"{hintContent[indexOfHint].text}{SPACE}");
+                inputText = TextBuilder.ToString();
+            }
+            else {
+                // Must be a command hint
+                TextBuilder.Append($"{Commands[hintIndex[indexOfHint]].GetDisplayName()}{SPACE}");
+                inputText = TextBuilder.ToString(); 
+            }
         }
 
         internal int GetCommandIndex() => selectedCommand;
         internal int GetArgumentCount() => argumentsAssigned;
         internal InputArgument GetArgumentByIndex(int index) => inputArguments[index];
-
         internal bool CanExecuteCommand() {
             if (HasCommand() == false) return false;
             
@@ -910,23 +904,13 @@ public class DevConsole : MonoBehaviour
             }
             return true;
         }
-        
         internal bool TryExecuteCommand() {
             List<Object> target = Commands[selectedCommand].GetTargets();
             ParameterInfo[] parameters = Commands[selectedCommand].GetParameters();
             object[] argumentValues = new object[parameters.Length];
             for (int i = 0; i < argumentValues.Length; i++) {
                 if (i < argumentsAssigned) {
-                    if (parameters[i].ParameterType == typeof(Scene) && false) {
-                        /*
-                        * Scenes are wacky, you can only really load scenes that are active or inside build list
-                         * Disabled for now, scenes doesn't want to play nice, just make a method that takes in an int for buildIndex
-                        */
-                        argumentValues[i] = SceneManager.GetSceneByPath((string)inputArguments[i].argumentValue);
-                    }
-                    else {
-                        argumentValues[i] = inputArguments[i].argumentValue;
-                    }
+                    argumentValues[i] = inputArguments[i].argumentValue;
                 }
                 else {
                     if (parameters[i].HasDefaultValue == false) 
@@ -948,6 +932,9 @@ public class DevConsole : MonoBehaviour
     }
 
 
+    /*
+     * make into arrays instead of structs
+     */
     struct InputArgument {
         internal string displayName;
         internal object argumentValue;
@@ -995,27 +982,6 @@ public class DevConsole : MonoBehaviour
         internal Type GetParameterType(int index) => parameters[index].ParameterType;
         internal ParameterInfo[] GetParameters() => parameters;
         internal List<Object> GetTargets() => targets;
-    }
-
-
-    struct InputHint : IComparable<InputHint> {
-        internal string displayString;
-        internal string outputString;
-        IComparable<InputHint> comparableImplementation;
-
-        // Having 2 strings for displaying commands, the visual adds the parameter names, for arguments both are the same
-        internal void SetHint(StringBuilder builder, string outputValue) {
-            displayString = builder.ToString();
-            outputString = outputValue;
-        }
-
-        internal void SetHint(StringBuilder builder) {
-            displayString = builder.ToString();
-            outputString = builder.ToString();
-        }
-        public int CompareTo(InputHint other) {
-            return string.Compare(displayString, other.displayString, StringComparison.InvariantCultureIgnoreCase);
-        }
     }
 }
 
