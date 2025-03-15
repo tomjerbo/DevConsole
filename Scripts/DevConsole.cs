@@ -306,20 +306,22 @@ public class DevConsole : MonoBehaviour
         if (inputCommand.HasText() == false && commandHistoryState == History.HIDE) {
             commandHistoryState = History.WAIT_FOR_INPUT;
         }
-        
-        if (hintsToDisplay == 0) {
-            selectedHint = -1;
-        }
-        
 
         if (windowHasFocus) {
             if (selectedHint != -1) {
                 if (inputEvent.InsertHint()) {
                     inputCommand.UseHint(selectedHint);
                     moveMarkerToEnd = 2;
+                    
+                    /*
+                     * TODO this might be removed, being able to chain inputs fast is really nice,
+                     * but wanting to unselect for using default value on arguments with defaults is annoying atm
+                     */
                     selectedHint = -1;
                 }
             }
+
+            
 
             if (inputEvent.NavigateDown()) {
                 selectedHint -= 1;
@@ -327,7 +329,7 @@ public class DevConsole : MonoBehaviour
                 if (commandHistoryState == History.WAIT_FOR_INPUT) {
                     commandHistoryState = History.SHOW;
                 }
-                if (selectedHint < 0) selectedHint = Mathf.Max(0, hintsToDisplay - 1);
+                if (selectedHint < -1) selectedHint = hintsToDisplay - 1;
             }
             else if (inputEvent.NavigateUp()) {
                 selectedHint += 1;
@@ -335,10 +337,12 @@ public class DevConsole : MonoBehaviour
                 if (commandHistoryState == History.WAIT_FOR_INPUT) {
                     commandHistoryState = History.SHOW;
                 }
-                if (selectedHint > hintsToDisplay) {
-                    selectedHint = 0;
+                if (selectedHint >= hintsToDisplay) {
+                    selectedHint = -1;
                 }
             }
+            
+            selectedHint = Mathf.Clamp(selectedHint, -1, hintsToDisplay-1);
         }
 
 
@@ -394,7 +398,20 @@ public class DevConsole : MonoBehaviour
         inputCommand.inputText = inputText;
         ParseInputForCommandsAndArguments();
         
-        GUI.Box(new Rect(Screen.width * 0.5f - 120,Screen.height * 0.5f - 16, 240,32), $"History state -> {commandHistoryState.ToString()}");
+        
+        
+        /*
+         * debug box
+         */
+        GUI.contentColor = Color.yellow;
+        
+        GUIContent debug = new () {
+            text = $"Hint argument index: {HintArgumentIndex}\n" +
+                   $"Hint type: {HintType[Mathf.Max(0,HintArgumentIndex)].Name}\n" +
+                   $"Selected Hint Index: {selectedHint}"
+        };
+        Vector2 size = consoleSkin.box.CalcSize(debug);
+        GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
         
         
         
