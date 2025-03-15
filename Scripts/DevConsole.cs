@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
@@ -18,8 +19,7 @@ using Object = UnityEngine.Object;
 /*
  * ----------- TODO LIST ----------------
  * Check how generic parameters are handled
- * Command history!
- * make commands execute if you press enter without selected hint
+ * add argument type info behind input text
  * 
  */
 
@@ -40,7 +40,8 @@ public class DevConsole : MonoBehaviour
     /*
      * Const
      */
-
+    
+    
     const BindingFlags BASE_FLAGS = BindingFlags.Default | BindingFlags.Public | BindingFlags.NonPublic;
     const BindingFlags INSTANCED_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Instance;
     const BindingFlags STATIC_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Static;
@@ -48,6 +49,7 @@ public class DevConsole : MonoBehaviour
     
     const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
+
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
     const float HINT_HEIGHT_TEXT_PADDING = 2f;
@@ -65,13 +67,14 @@ public class DevConsole : MonoBehaviour
     bool hasConsoleBeenInitialized;
     static DevConsoleCache Cache;
     static DevConsoleStyle Style;
+    static readonly string CommandHistoryPath = Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
     static readonly CommandData[] Commands = new CommandData[256];
     static readonly int[] HintIndex = new int[32];
     static readonly Type[] HintType = new Type[32];
     static readonly GUIContent[] HintContent = new GUIContent[32];
     static readonly Type SO_TYPE = typeof(ScriptableObject);
     static readonly Type COMMAND_TYPE = typeof(CommandData);
-    static readonly Type HISTORY_TYPE = typeof(string); // Hijacking string type to act as history since wtf am i suppose to suggest for a string argument? xd
+    static History CommandHistoryState;
     static int HintArgumentIndex = -1;
     static int StaticCommandCount;
     int hintsToDisplay;
@@ -89,8 +92,7 @@ public class DevConsole : MonoBehaviour
      */
     static readonly StringBuilder TextBuilder = new (256);
     readonly InputCommand inputCommand = new ();
-    readonly List<string> HistoryCommands = new (24);
-    History commandHistoryState;
+    readonly List<string> HistoryCommands = new (32);
     bool isActive;
     int moveMarkerToEnd;
     int selectedHint;
@@ -108,6 +110,7 @@ public class DevConsole : MonoBehaviour
     Vector2 consoleInputDrawPos;
     Vector2 consoleInputSize;
     float selectionBump;
+    float argumentHintBump;
     
     
     
@@ -122,7 +125,7 @@ public class DevConsole : MonoBehaviour
         consoleSkin = Resources.Load<GUISkin>(DEV_CONSOLE_SKIN_PATH);
         Cache = Resources.Load<DevConsoleCache>(DevConsoleCache.ASSET_PATH);
         Style = Resources.Load<DevConsoleStyle>(DevConsoleStyle.ASSET_PATH);
-        
+        LoadCommandHistory();
         Array.Fill(HintType, COMMAND_TYPE);
         for (int i = 0; i < HintContent.Length; i++) {
             HintContent[i] = new GUIContent();
@@ -195,10 +198,28 @@ public class DevConsole : MonoBehaviour
 
     void OnDestroy() {
         SceneManager.sceneLoaded -= OnSceneChanged;
+        SaveCommandHistory();
     }
 
     
+    [DevCommand]
+    void SaveCommandHistory() {
+        File.WriteAllLines(CommandHistoryPath, HistoryCommands);
+    }
+    
+    
+    [DevCommand]
+    void LoadCommandHistory() {
+        HistoryCommands.Clear();
+        HistoryCommands.AddRange(File.ReadAllLines(CommandHistoryPath));
+        HistoryCommands.Reverse();
+    }
 
+    [DevCommand]
+    void OpenCommandHistoryPath() {
+        Application.OpenURL(Application.persistentDataPath);
+    }
+    
     /*
      * Console Actions
      */
@@ -240,7 +261,10 @@ public class DevConsole : MonoBehaviour
         UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = true;
 #endif
     }
-    
+
+
+
+
     
     
     /*
@@ -275,6 +299,7 @@ public class DevConsole : MonoBehaviour
         GUISkin skin = GUI.skin;
         GUI.skin = consoleSkin;
         selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectionBumpSpeed * Time.unscaledDeltaTime);
+        argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgumentTypeSpeed * Time.unscaledDeltaTime);
         bool windowHasFocus = GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID;
         
         /*
@@ -303,8 +328,8 @@ public class DevConsole : MonoBehaviour
             // Array.Sort(hintContent, 0, hintsToDisplay);
         }
 
-        if (inputCommand.HasText() == false && commandHistoryState == History.HIDE) {
-            commandHistoryState = History.WAIT_FOR_INPUT;
+        if (inputCommand.HasText() == false && CommandHistoryState == History.HIDE) {
+            CommandHistoryState = History.WAIT_FOR_INPUT;
         }
 
         if (windowHasFocus) {
@@ -312,30 +337,23 @@ public class DevConsole : MonoBehaviour
                 if (inputEvent.InsertHint()) {
                     inputCommand.UseHint(selectedHint);
                     moveMarkerToEnd = 2;
-                    
-                    /*
-                     * TODO this might be removed, being able to chain inputs fast is really nice,
-                     * but wanting to unselect for using default value on arguments with defaults is annoying atm
-                     */
-                    selectedHint = -1;
                 }
             }
-
             
 
             if (inputEvent.NavigateDown()) {
                 selectedHint -= 1;
                 selectionBump = 0;
-                if (commandHistoryState == History.WAIT_FOR_INPUT) {
-                    commandHistoryState = History.SHOW;
+                if (CommandHistoryState == History.WAIT_FOR_INPUT) {
+                    CommandHistoryState = History.SHOW;
                 }
                 if (selectedHint < -1) selectedHint = hintsToDisplay - 1;
             }
             else if (inputEvent.NavigateUp()) {
                 selectedHint += 1;
                 selectionBump = 0;
-                if (commandHistoryState == History.WAIT_FOR_INPUT) {
-                    commandHistoryState = History.SHOW;
+                if (CommandHistoryState == History.WAIT_FOR_INPUT) {
+                    CommandHistoryState = History.SHOW;
                 }
                 if (selectedHint >= hintsToDisplay) {
                     selectedHint = -1;
@@ -344,32 +362,27 @@ public class DevConsole : MonoBehaviour
             
             selectedHint = Mathf.Clamp(selectedHint, -1, hintsToDisplay-1);
         }
-
-
+        
 
 
 
         if (inputCommand.HasCommand() && inputEvent.ExecuteCommand(false)) {
             if (inputCommand.TryExecuteCommand()) {
                 inputEvent.Use();
+                
+                HistoryCommands.Remove(inputCommand.inputText);
                 HistoryCommands.Insert(0, inputCommand.inputText);
+                if (HistoryCommands.Count > 32) {
+                    HistoryCommands.RemoveAt(HistoryCommands.Count-1);
+                }
+                
                 inputCommand.Clear();
-                commandHistoryState = History.WAIT_FOR_INPUT;
+                CommandHistoryState = History.WAIT_FOR_INPUT;
                 moveMarkerToEnd = 2;
                 hintsToDisplay = 0;
                 selectedHint = -1;
             }
         }
-        
-        /*
-         * Execute command
-         * Could maybe avoid extra command parsing if we do this after textinput
-         * it wouldn't account for space after argument/command though..
-         * not sure if I like how that is all setup atm
-         */
-
-        
-        
         
         
         
@@ -393,11 +406,42 @@ public class DevConsole : MonoBehaviour
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
         string inputText = GUI.TextField(inputFieldRect, inputCommand.inputText);
         if (inputText != inputCommand.inputText) {
-            commandHistoryState = History.HIDE;
+            CommandHistoryState = History.HIDE;
         }
         inputCommand.inputText = inputText;
         ParseInputForCommandsAndArguments();
         
+        
+        /*
+         * Draw argument hint box
+         */
+
+        if (inputCommand.HasCommand() && HintArgumentIndex != -1) {
+            ParameterInfo parameterInfo = Commands[inputCommand.commandIndex].GetParameters()[HintArgumentIndex];
+            
+            TextBuilder.Clear();
+            TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>< </color>");
+            TextBuilder.Append($"{parameterInfo.ParameterType.Name}");
+            TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}> ></color>");
+            
+            
+            GUIContent argumentHint = new ($"< {parameterInfo.ParameterType.Name} >");
+            GUIContent inputFieldText = new (inputCommand.inputText);
+            
+            Vector2 inputTextSize = consoleSkin.textField.CalcSize(inputFieldText);
+            Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
+            
+            Rect argumentHintRect = new (consoleInputDrawPos, consoleInputSize);
+            argumentHintRect.position += new Vector2(inputTextSize.x + Style.ArgumentTypeHintSpacing, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeOffsetAmount);
+            argumentHintRect.width = Mathf.Clamp(argumentHintSize.x, 0, Mathf.Max(0, inputFieldRect.xMax - argumentHintRect.position.x));
+            
+            GUI.color = Color.white;
+            GUI.backgroundColor = Color.white;
+            GUI.contentColor = Style.InputArgumentType;
+            // GUI.contentColor = Color.white;
+            argumentHint.text = TextBuilder.ToString();
+            GUI.Label(argumentHintRect, argumentHint);
+        }
         
         
         /*
@@ -408,14 +452,15 @@ public class DevConsole : MonoBehaviour
         GUIContent debug = new () {
             text = $"Hint argument index: {HintArgumentIndex}\n" +
                    $"Hint type: {HintType[Mathf.Max(0,HintArgumentIndex)].Name}\n" +
-                   $"Selected Hint Index: {selectedHint}"
+                   $"Selected Hint Index: {selectedHint}\n" +
+                   $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}"
         };
         Vector2 size = consoleSkin.box.CalcSize(debug);
         GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
         
         
         
-        if (hintsToDisplay > 0 && commandHistoryState != History.WAIT_FOR_INPUT) {
+        if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
             DrawHintWindow(hintsToDisplay);
         }
         else {
@@ -438,6 +483,8 @@ public class DevConsole : MonoBehaviour
             TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
             text.MoveTextEnd();
         }
+        
+        
         
         /*
          * Reset gui skin
@@ -488,11 +535,10 @@ public class DevConsole : MonoBehaviour
         /*
          * Command history hints
          */
-        if (commandHistoryState != History.HIDE) {
+        if (CommandHistoryState != History.HIDE) {
             for (int i = 0; i < HistoryCommands.Count; i++) {
                 HintContent[hintsFound].text = HistoryCommands[i];
                 HintIndex[hintsFound] = i;
-                HintType[hintsFound] = HISTORY_TYPE;
                 hintsFound++;
             }
 
@@ -500,11 +546,6 @@ public class DevConsole : MonoBehaviour
         }
         
         
-        /*
-         * something is wrong with hint index stuff
-         * doing "Flip arg " then going back to previous and applying it replaces it with the next hint or something
-         * very strange
-         */
         if (inputCommand.HasText() == false) {
             return hintsFound;
         }
@@ -572,6 +613,9 @@ public class DevConsole : MonoBehaviour
             }
         }
 
+        if (HintArgumentIndex != argumentCount) {
+            argumentHintBump = 0;
+        }
         HintArgumentIndex = argumentCount;
         
         
@@ -943,7 +987,7 @@ public class DevConsole : MonoBehaviour
             /*
              * Are we doing a history command?
              */
-            if (HintType[indexOfHint] == HISTORY_TYPE) {
+            if (CommandHistoryState == History.SHOW) {
                 TextBuilder.Append(HintContent[indexOfHint].text);
                 inputText = TextBuilder.ToString();
                 return;

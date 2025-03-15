@@ -10,6 +10,8 @@ namespace Jerbo.Tools {
         public Color BorderColor = Color.white;
         public Color InputTextDefault = Color.white;
         public Color InputValidCommand = Color.white;
+        public Color InputArgumentType = Color.white;
+        public Color InputArgumentTypeBorder = Color.white;
         public Color HintTextColorDefault = Color.white;
         public Color HintTextColorSelected = Color.white;
 
@@ -17,6 +19,10 @@ namespace Jerbo.Tools {
         public float ConsoleWindowHeight = 36f;
         public float SelectionBumpOffsetAmount = 12f;
         public float SelectionBumpSpeed = 8f;
+        public float ArgumentTypeOffsetAmount = 12f;
+        public float ArgumentTypeSpeed = 8f;
+        public float ArgumentTypeHintSpacing = 8f;
         public AnimationCurve SelectionBumpCurve;
+        public AnimationCurve ArgumentTypeBumpCurve;
     }
 }

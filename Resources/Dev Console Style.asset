@@ -12,14 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b185ae0910444e47b115db3a4df3937e, type: 3}
   m_Name: Dev Console Style
   m_EditorClassIdentifier: 
-  BorderColor: {r: 1, g: 0.52380955, b: 0, a: 1}
-  InputTextDefault: {r: 0.735849, g: 0.735849, b: 0.735849, a: 1}
-  InputValidCommand: {r: 0.6745098, g: 1, b: 0.57254905, a: 1}
+  BorderColor: {r: 0.2924528, g: 0.2924528, b: 0.2924528, a: 1}
+  InputTextDefault: {r: 0.8301887, g: 0.8301887, b: 0.8301887, a: 1}
+  InputValidCommand: {r: 1, g: 0.6862745, b: 0.34117648, a: 1}
+  InputArgumentType: {r: 0.45882353, g: 0.7372549, b: 0.94509804, a: 1}
   HintTextColorDefault: {r: 0.5377358, g: 0.5377358, b: 0.5377358, a: 1}
   HintTextColorSelected: {r: 1, g: 0.68725497, b: 0.34117648, a: 1}
   ConsoleWindowHeight: 36
   SelectionBumpOffsetAmount: 8
   SelectionBumpSpeed: 8
+  ArgumentTypeOffsetAmount: -6
+  ArgumentTypeSpeed: 12
+  ArgumentTypeHintSpacing: 0
   SelectionBumpCurve:
     serializedVersion: 2
     m_Curve:
@@ -43,4 +47,28 @@ MonoBehaviour:
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
+    m_RotationOrder: 4
+  ArgumentTypeBumpCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 2.8162029
+      outSlope: 2.8162029
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.106527776
+    - serializedVersion: 3
+      time: 0.5
+      value: 0.65
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 0
     m_RotationOrder: 4
