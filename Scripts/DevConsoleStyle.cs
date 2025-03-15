@@ -17,6 +17,7 @@ namespace Jerbo.Tools {
 
         [Tab("Layout", Tab.Color.Pink)]
         public float ConsoleWindowHeight = 36f;
+        public float HintWindowHeightOffset = 0f;
         public float SelectionBumpOffsetAmount = 12f;
         public float SelectionBumpSpeed = 8f;
         public float ArgumentTypeOffsetAmount = 12f;

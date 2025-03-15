@@ -49,7 +49,7 @@ public class DevConsole : MonoBehaviour
     
     const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
-
+    const int MAX_HINTS = 32;
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
     const float HINT_HEIGHT_TEXT_PADDING = 2f;
@@ -401,10 +401,10 @@ public class DevConsole : MonoBehaviour
         GUI.backgroundColor = Style.BorderColor;
         
         GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.InputValidCommand : Style.InputTextDefault;
-        
         Rect inputFieldRect = new (consoleInputDrawPos, consoleInputSize);
+        GUIContent inputFieldText = new (inputCommand.inputText);
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
-        string inputText = GUI.TextField(inputFieldRect, inputCommand.inputText);
+        string inputText = GUI.TextField(inputFieldRect, inputFieldText.text);
         if (inputText != inputCommand.inputText) {
             CommandHistoryState = History.HIDE;
         }
@@ -426,8 +426,6 @@ public class DevConsole : MonoBehaviour
             
             
             GUIContent argumentHint = new ($"< {parameterInfo.ParameterType.Name} >");
-            GUIContent inputFieldText = new (inputCommand.inputText);
-            
             Vector2 inputTextSize = consoleSkin.textField.CalcSize(inputFieldText);
             Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
             
@@ -435,10 +433,7 @@ public class DevConsole : MonoBehaviour
             argumentHintRect.position += new Vector2(inputTextSize.x + Style.ArgumentTypeHintSpacing, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeOffsetAmount);
             argumentHintRect.width = Mathf.Clamp(argumentHintSize.x, 0, Mathf.Max(0, inputFieldRect.xMax - argumentHintRect.position.x));
             
-            GUI.color = Color.white;
-            GUI.backgroundColor = Color.white;
             GUI.contentColor = Style.InputArgumentType;
-            // GUI.contentColor = Color.white;
             argumentHint.text = TextBuilder.ToString();
             GUI.Label(argumentHintRect, argumentHint);
         }
@@ -460,8 +455,54 @@ public class DevConsole : MonoBehaviour
         
         
         
+        
+        /*
+         * Draw Command Hints
+         */
         if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
-            DrawHintWindow(hintsToDisplay);
+            float maximumWidth = 0;
+            float maximumHeight = 0;
+        
+            for (int i = 0; i < hintsToDisplay; i++) {
+                Vector2 hintTextSize = consoleSkin.label.CalcSize(HintContent[i]);
+                maximumWidth = Mathf.Max(hintTextSize.x, maximumWidth);
+                maximumHeight += hintTextSize.y + HINT_HEIGHT_TEXT_PADDING;
+            }
+            maximumWidth += Style.SelectionBumpOffsetAmount;
+
+
+            float horizontalOffset = 0;
+            /*
+             * TODO figure out how to correctly get where to offset the hint menu
+             */
+            // if (inputCommand.HasCommand()) {
+            //     int charCount = Commands[inputCommand.commandIndex].GetDisplayName().Length;
+            //     for (int i = 0; i < HintArgumentIndex-1; i++) {
+            //         charCount += inputCommand.inputArgumentName[i].Length;
+            //     }
+            //
+            //     inputFieldText.text = inputFieldText.text[..charCount];
+            //     horizontalOffset = consoleSkin.textField.CalcSize(inputFieldText).x;
+            // }
+            
+            GUI.backgroundColor = Style.BorderColor;
+            Rect hintBackgroundRect = new (consoleInputDrawPos + new Vector2(horizontalOffset, (maximumHeight + Style.HintWindowHeightOffset) * -1), new Vector2(maximumWidth, maximumHeight));
+            GUI.Box(hintBackgroundRect, "");
+        
+            Vector2 hintStartPos = hintBackgroundRect.position;
+            float stepHeight = maximumHeight / hintsToDisplay;
+            for (int i = 0; i < hintsToDisplay; i++) {
+                bool isSelected = i == selectedHint;
+            
+                float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectionBumpOffsetAmount : 0;
+                Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
+            
+                /*
+             * better visual selection, only highlight the part that is relevant
+             */
+                GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
+                GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), HintContent[i]);
+            }
         }
         else {
             selectedHint = -1;
@@ -493,42 +534,6 @@ public class DevConsole : MonoBehaviour
     }
 
 
-    void DrawHintWindow(int hintAmount) {
-        /*
-         * Draw Command Hints
-         */
-        
-        float maximumWidth = 0;
-        float maximumHeight = 0;
-        
-        for (int i = 0; i < hintAmount; i++) {
-            Vector2 size = consoleSkin.label.CalcSize(HintContent[i]);
-            maximumWidth = Mathf.Max(size.x, maximumWidth);
-            maximumHeight += size.y + HINT_HEIGHT_TEXT_PADDING;
-        }
-
-        maximumWidth += Style.SelectionBumpOffsetAmount;
-        GUI.backgroundColor = Style.BorderColor;
-        Rect hintBackgroundRect = new (consoleInputDrawPos - new Vector2(0, maximumHeight + HEIGHT_SPACING), new Vector2(maximumWidth, maximumHeight));
-        GUI.Box(hintBackgroundRect, "");
-        
-        Vector2 hintStartPos = hintBackgroundRect.position;
-        float stepHeight = maximumHeight / hintAmount;
-        for (int i = 0; i < hintAmount; i++) {
-            bool isSelected = i == selectedHint;
-            
-            float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectionBumpOffsetAmount : 0;
-            Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
-            
-            /*
-             * better visual selection, only highlight the part that is relevant
-             */
-            GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
-            GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), HintContent[i]);
-        }
-    } 
-
-    
     int ParseInputForHints() {
         int hintsFound = 0;
         
@@ -557,7 +562,6 @@ public class DevConsole : MonoBehaviour
             string[] inputWords = inputCommand.inputText.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
            
             for (int i = 0; i < totalCommandCount; i++) {
-                
                 bool matchingHint = true; 
                 foreach (string word in inputWords) {
                     if (Commands[i].GetDisplayName().Contains(word, StringComparison.InvariantCultureIgnoreCase) == false) {
@@ -572,6 +576,8 @@ public class DevConsole : MonoBehaviour
                     HintType[hintsFound] = COMMAND_TYPE;
                     hintsFound++;
                 }
+
+                if (hintsFound == MAX_HINTS) return hintsFound; 
             }
 
             return hintsFound;
@@ -664,6 +670,8 @@ public class DevConsole : MonoBehaviour
                     HintType[hintsFound] = argumentType;
                     hintsFound++;
                 }
+                
+                if (hintsFound == MAX_HINTS) return hintsFound; 
             }
 
             return hintsFound;
@@ -696,6 +704,8 @@ public class DevConsole : MonoBehaviour
                     HintType[hintsFound] = SO_TYPE;
                     hintsFound++;
                 }
+                
+                if (hintsFound == MAX_HINTS) return hintsFound; 
             }
 
             return hintsFound;
@@ -712,7 +722,6 @@ public class DevConsole : MonoBehaviour
     }
     
 
-    
     /*
      * TODO remove 'ignoreSpacingRequirement' bool, it was used to keep hints active after first matching command was found but
      * the logic has been changed to hints checking if they should keep displaying or not

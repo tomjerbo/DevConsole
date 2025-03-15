@@ -262,7 +262,7 @@ MonoBehaviour:
       m_Left: 8
       m_Right: 8
       m_Top: 2
-      m_Bottom: 2
+      m_Bottom: 4
     m_Overflow:
       m_Left: 0
       m_Right: 0
