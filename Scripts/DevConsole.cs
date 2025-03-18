@@ -19,7 +19,8 @@ using Object = UnityEngine.Object;
 /*
  * ----------- TODO LIST ----------------
  * Check how generic parameters are handled
- * add argument type info behind input text
+ * Check how override methods are handled
+ * Hard select commands and arguments, segment input into each part
  * 
  */
 
