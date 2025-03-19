@@ -21,7 +21,8 @@ using Object = UnityEngine.Object;
  * Check how generic parameters are handled
  * Check how override methods are handled
  * Hard select commands and arguments, segment input into each part
- * 
+ * Offset hint menu inline with argument position
+ * Add toast menu for executed commands
  */
 
 
@@ -70,9 +71,9 @@ public class DevConsole : MonoBehaviour
     static DevConsoleStyle Style;
     static readonly string CommandHistoryPath = Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
     static readonly CommandData[] Commands = new CommandData[256];
-    static readonly int[] HintIndex = new int[32];
-    static readonly Type[] HintType = new Type[32];
-    static readonly GUIContent[] HintContent = new GUIContent[32];
+    static readonly int[] HintIndex = new int[MAX_HINTS];
+    static readonly Type[] HintType = new Type[MAX_HINTS];
+    static readonly GUIContent[] HintContent = new GUIContent[MAX_HINTS];
     static readonly Type SO_TYPE = typeof(ScriptableObject);
     static readonly Type COMMAND_TYPE = typeof(CommandData);
     static History CommandHistoryState;
@@ -337,7 +338,9 @@ public class DevConsole : MonoBehaviour
             if (selectedHint != -1) {
                 if (inputEvent.InsertHint()) {
                     inputCommand.UseHint(selectedHint);
+                    CommandHistoryState = History.HIDE;
                     moveMarkerToEnd = 2;
+                    selectedHint = -1;
                 }
             }
             
@@ -382,6 +385,8 @@ public class DevConsole : MonoBehaviour
                 moveMarkerToEnd = 2;
                 hintsToDisplay = 0;
                 selectedHint = -1;
+                
+                CloseConsole();
             }
         }
         
@@ -489,6 +494,11 @@ public class DevConsole : MonoBehaviour
             GUI.backgroundColor = Style.BorderColor;
             Rect hintBackgroundRect = new (consoleInputDrawPos + new Vector2(horizontalOffset, (maximumHeight + Style.HintWindowHeightOffset) * -1), new Vector2(maximumWidth, maximumHeight));
             GUI.Box(hintBackgroundRect, "");
+            /*
+             * make into scroll region?
+             * or make a manual one
+             */
+            // GUI.BeginScrollView(hintBackgroundRect)
         
             Vector2 hintStartPos = hintBackgroundRect.position;
             float stepHeight = maximumHeight / hintsToDisplay;
@@ -497,10 +507,7 @@ public class DevConsole : MonoBehaviour
             
                 float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectionBumpOffsetAmount : 0;
                 Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
-            
-                /*
-             * better visual selection, only highlight the part that is relevant
-             */
+                
                 GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
                 GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), HintContent[i]);
             }
@@ -543,6 +550,8 @@ public class DevConsole : MonoBehaviour
          */
         if (CommandHistoryState != History.HIDE) {
             for (int i = 0; i < HistoryCommands.Count; i++) {
+                if (hintsFound == MAX_HINTS) break;
+
                 HintContent[hintsFound].text = HistoryCommands[i];
                 HintIndex[hintsFound] = i;
                 hintsFound++;
@@ -563,6 +572,8 @@ public class DevConsole : MonoBehaviour
             string[] inputWords = inputCommand.inputText.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
            
             for (int i = 0; i < totalCommandCount; i++) {
+                if (hintsFound == MAX_HINTS) break;
+                
                 bool matchingHint = true; 
                 foreach (string word in inputWords) {
                     if (Commands[i].GetDisplayName().Contains(word, StringComparison.InvariantCultureIgnoreCase) == false) {
@@ -577,8 +588,6 @@ public class DevConsole : MonoBehaviour
                     HintType[hintsFound] = COMMAND_TYPE;
                     hintsFound++;
                 }
-
-                if (hintsFound == MAX_HINTS) return hintsFound; 
             }
 
             return hintsFound;
@@ -657,6 +666,8 @@ public class DevConsole : MonoBehaviour
         if (argumentType.IsEnum) {
             string[] namesInsideEnum = argumentType.GetEnumNames();
             for (int i = 0; i < namesInsideEnum.Length; i++) {
+                if (hintsFound == MAX_HINTS) break;
+                
                 bool containsWord = true;
                 for (int wordIndex = 0; wordIndex < inputWithoutMatches.Length; wordIndex++) {
                     if (namesInsideEnum[i].Contains(inputWithoutMatches[wordIndex], StringComparison.InvariantCultureIgnoreCase) == false) {
@@ -671,8 +682,6 @@ public class DevConsole : MonoBehaviour
                     HintType[hintsFound] = argumentType;
                     hintsFound++;
                 }
-                
-                if (hintsFound == MAX_HINTS) return hintsFound; 
             }
 
             return hintsFound;
@@ -685,6 +694,8 @@ public class DevConsole : MonoBehaviour
 
         if (SO_TYPE.IsAssignableFrom(argumentType)) {
             for (int i = 0; i < Cache.AssetReferences.Length; i++) {
+                if (hintsFound == MAX_HINTS) break;
+
                 ScriptableObject asset = Cache.AssetReferences[i];
                 /*
                  * Asset is scriptableObject but has wrong inheritance type
@@ -705,8 +716,6 @@ public class DevConsole : MonoBehaviour
                     HintType[hintsFound] = SO_TYPE;
                     hintsFound++;
                 }
-                
-                if (hintsFound == MAX_HINTS) return hintsFound; 
             }
 
             return hintsFound;
