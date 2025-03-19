@@ -1,13 +1,36 @@
+using Jerbo.Inspector;
 using UnityEngine;
 
 namespace Jerbo.Tools { 
-// [CreateAssetMenu]
 public class DevConsoleCache : ScriptableObject
 {
+    public const string ASSET_PATH = "Dev Console Cache";
+    static string[] SEARCH_FOLDERS = { "Assets" };
+    [HideInInspector, SerializeField] public ScriptableObject[] AssetReferences;
+    [HideInInspector, SerializeField] public string[] AssetNames;
     
 #if UNITY_EDITOR
-    [UnityEditor.InitializeOnLoadMethod, DevCommand("LoadCache")]
-    static void CacheAssetReferences() {
+    [SerializeField, ReadOnly] int AssetsCached;
+
+    /*
+     * Different caching spots
+     * enter play mode
+     * builds
+     */
+    
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void OnEnterGame() {
+        Debug.Log("Caching from runtime init");
+        CacheAssetReferences();
+    }
+    
+    
+    /*
+     * Caching method
+     */
+    
+    [DevCommand("RebuildCache")]
+    internal static void CacheAssetReferences() {
         DevConsoleCache cache = Resources.Load<DevConsoleCache>(ASSET_PATH);
     
         
@@ -22,13 +45,23 @@ public class DevConsoleCache : ScriptableObject
             cache.AssetNames[i] = cache.AssetReferences[i].name;
         }
 
-        // Debug.Log($"DevConsole Cached -> {cache.AssetReferences.Length} ScriptableObjects & {cache.SceneNames.Length} Scenes");
+        cache.AssetsCached = cache.AssetReferences.Length;
+        Debug.Log($"DevConsole Cached -> {cache.AssetReferences.Length} ScriptableObjects");
     }
+    
 #endif
-
-    static string[] SEARCH_FOLDERS = { "Assets" };
-    public const string ASSET_PATH = "Dev Console Cache";
-    [HideInInspector] public ScriptableObject[] AssetReferences;
-    [HideInInspector] public string[] AssetNames;
 }
+
+/*
+ * Callback when triggering a build
+ */
+#if UNITY_EDITOR
+public class DevConsoleCacheBuildCallback : UnityEditor.Build.IPreprocessBuildWithReport {
+    public int callbackOrder => 0;
+    public void OnPreprocessBuild(UnityEditor.Build.Reporting.BuildReport report) {
+        Debug.Log("Caching from build");
+        DevConsoleCache.CacheAssetReferences();
+    }
+}
+#endif
 }

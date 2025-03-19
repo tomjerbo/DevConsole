@@ -12,7 +12,6 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
 
 
@@ -23,6 +22,10 @@ using Object = UnityEngine.Object;
  * Hard select commands and arguments, segment input into each part
  * Offset hint menu inline with argument position
  * Add toast menu for executed commands
+ *
+ *
+ * Make container ScriptableObject for DevConsole, have it spawn in console & hold references to data objects
+ * so unity doesn't ignore them when building and it also removes need to load stuff from resources!
  */
 
 
@@ -31,7 +34,7 @@ namespace Jerbo.Tools
 {
 public class DevConsole : MonoBehaviour
 {
-    [RuntimeInitializeOnLoadMethod]
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void SpawnConsoleInScene() {
         GameObject consoleContainer = new ("- Dev Console -");
         consoleContainer.AddComponent<DevConsole>();
@@ -81,7 +84,6 @@ public class DevConsole : MonoBehaviour
     static int StaticCommandCount;
     int hintsToDisplay;
     int totalCommandCount;
-    int historySelectionIndex = -1;
 
     
     
@@ -121,6 +123,13 @@ public class DevConsole : MonoBehaviour
      *
      */
     
+    [DevCommand]
+    void LogCache() {
+        Debug.LogError($"- Cached Assets({Cache.AssetNames.Length}) -");
+        for (int i = 0; i < Cache.AssetNames.Length; i++) {
+            Debug.LogError($"{Cache.AssetNames[i]} -> {Cache.AssetReferences[i].GetInstanceID()}");
+        }
+    }
     
     
     void InitializeConsole() {
@@ -184,22 +193,8 @@ public class DevConsole : MonoBehaviour
         index = -1;
         return false;
     }
-    
-    void OnSceneChanged(Scene scene, LoadSceneMode loadSceneMode) {
-        if (isActive == false) return;
-        LoadInstanceCommands();
-    }
-
-
-    /*
-     * Not sure if i like having this callback here, maybe just add it onto recompile callback
-     */
-    void Awake() {
-        SceneManager.sceneLoaded += OnSceneChanged;
-    }
 
     void OnDestroy() {
-        SceneManager.sceneLoaded -= OnSceneChanged;
         SaveCommandHistory();
     }
 
@@ -208,7 +203,6 @@ public class DevConsole : MonoBehaviour
     void SaveCommandHistory() {
         File.WriteAllLines(CommandHistoryPath, HistoryCommands);
     }
-    
     
     [DevCommand]
     void LoadCommandHistory() {
@@ -221,6 +215,8 @@ public class DevConsole : MonoBehaviour
     void OpenCommandHistoryPath() {
         Application.OpenURL(Application.persistentDataPath);
     }
+    
+    
     
     /*
      * Console Actions
@@ -287,8 +283,6 @@ public class DevConsole : MonoBehaviour
         
         
         if (inputEvent.CloseConsole()) CloseConsole();
-        
-        
         DrawConsole();
     }
 
