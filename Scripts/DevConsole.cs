@@ -54,6 +54,8 @@ public class DevConsole : MonoBehaviour
     
     const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
+    const string VALID_VALUE_HINT = "[Valid Input]";
+    const string INVALID_VALUE_HINT = "[In-Valid Input]";
     const int MAX_HINTS = 32;
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
@@ -75,12 +77,11 @@ public class DevConsole : MonoBehaviour
     static readonly string CommandHistoryPath = Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
     static readonly CommandData[] Commands = new CommandData[256];
     static readonly int[] HintIndex = new int[MAX_HINTS];
-    static readonly Type[] HintType = new Type[MAX_HINTS];
+    static readonly object[] HintValue = new object[MAX_HINTS];
     static readonly GUIContent[] HintContent = new GUIContent[MAX_HINTS];
     static readonly Type SO_TYPE = typeof(ScriptableObject);
     static readonly Type COMMAND_TYPE = typeof(CommandData);
     static History CommandHistoryState;
-    static int HintArgumentIndex = -1;
     static int StaticCommandCount;
     int hintsToDisplay;
     int totalCommandCount;
@@ -114,7 +115,7 @@ public class DevConsole : MonoBehaviour
     Vector2 consoleInputDrawPos;
     Vector2 consoleInputSize;
     float selectionBump;
-    float argumentHintBump;
+    static float argumentHintBump;
     
     
     
@@ -137,7 +138,8 @@ public class DevConsole : MonoBehaviour
         Cache = Resources.Load<DevConsoleCache>(DevConsoleCache.ASSET_PATH);
         Style = Resources.Load<DevConsoleStyle>(DevConsoleStyle.ASSET_PATH);
         LoadCommandHistory();
-        Array.Fill(HintType, COMMAND_TYPE);
+        Array.Fill(HintValue, COMMAND_TYPE);
+        Array.Fill(inputCommand.inputArgumentName, new GUIContent());
         for (int i = 0; i < HintContent.Length; i++) {
             HintContent[i] = new GUIContent();
         }
@@ -315,7 +317,7 @@ public class DevConsole : MonoBehaviour
         /*
          * make it possible to show command history as hints, add new hint type
          */
-        hintsToDisplay = ParseInputForHints();
+        hintsToDisplay = ParseHints();
         if (hintsToDisplay > 1) {
             /*
              * how do i sort the array when i have multiple that needs to follow the same index layout?
@@ -324,7 +326,7 @@ public class DevConsole : MonoBehaviour
             // Array.Sort(hintContent, 0, hintsToDisplay);
         }
 
-        if (inputCommand.HasText() == false && CommandHistoryState == History.HIDE) {
+        if (inputCommand.commandIndex == -1 && inputCommand.HasText() == false && CommandHistoryState == History.HIDE) {
             CommandHistoryState = History.WAIT_FOR_INPUT;
         }
 
@@ -364,12 +366,13 @@ public class DevConsole : MonoBehaviour
 
 
 
-        if (inputCommand.HasCommand() && inputEvent.ExecuteCommand(false)) {
+        
+        if (inputCommand.CanExecuteCommand() && inputEvent.ExecuteCommand(false)) {
             if (inputCommand.TryExecuteCommand()) {
                 inputEvent.Use();
                 
-                HistoryCommands.Remove(inputCommand.inputText);
-                HistoryCommands.Insert(0, inputCommand.inputText);
+                HistoryCommands.Remove(inputCommand.inputContent.text);
+                HistoryCommands.Insert(0, inputCommand.inputContent.text);
                 if (HistoryCommands.Count > 32) {
                     HistoryCommands.RemoveAt(HistoryCommands.Count-1);
                 }
@@ -386,6 +389,7 @@ public class DevConsole : MonoBehaviour
         
         
         
+        
         /*
          * draw console input area
          */
@@ -398,44 +402,76 @@ public class DevConsole : MonoBehaviour
          * 
          * doesn't need to update hints & parse commands if input hasn't changed
          */
-        GUI.backgroundColor = Style.BorderColor;
         
+        GUI.backgroundColor = Style.BorderColor;
         GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.InputValidCommand : Style.InputTextDefault;
-        Rect inputFieldRect = new (consoleInputDrawPos, consoleInputSize);
-        GUIContent inputFieldText = new (inputCommand.inputText);
+        Rect consoleInputBackground = new (consoleInputDrawPos, consoleInputSize);
+        
+        // Background
+        GUI.Box(consoleInputBackground, string.Empty);
+        
+        GUI.backgroundColor = Color.clear;
+
+        float drawPosX = consoleInputBackground.x;
+        if (inputCommand.commandIndex != -1) {
+            Rect commandRect = new Rect(consoleInputBackground);
+            commandRect.width = consoleSkin.label.CalcSize(inputCommand.commandContent).x;
+            GUI.color = Color.yellow;
+            GUI.Label(commandRect, inputCommand.commandContent);
+            drawPosX += commandRect.width;
+
+            GUI.color = Color.cyan;
+            for (int i = 0; i < inputCommand.argumentCount; i++) {
+                Rect argRect = new Rect(commandRect);
+                argRect.x = drawPosX + consoleSkin.label.CalcSize(inputCommand.inputArgumentName[i]).x;
+                GUI.Label(argRect, inputCommand.inputArgumentName[i]);
+                drawPosX = argRect.x;
+            }
+        }
+        
+        
+
+        GUI.color = Color.red;
+        GUIContent inputFieldText = new (inputCommand.inputContent);
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
+        Rect inputFieldRect = new Rect(consoleInputBackground);
+        inputFieldRect.x = drawPosX;
         string inputText = GUI.TextField(inputFieldRect, inputFieldText.text);
-        if (inputText != inputCommand.inputText) {
+        if (inputText != inputCommand.inputContent.text) {
             CommandHistoryState = History.HIDE;
         }
-        inputCommand.inputText = inputText;
-        ParseInputForCommandsAndArguments();
+        inputCommand.inputContent.text = inputText;
+        // ParseInputForCommandsAndArguments();
         
         
         /*
          * Draw argument hint box
          */
 
-        if (inputCommand.HasCommand() && HintArgumentIndex != -1) {
-            ParameterInfo parameterInfo = Commands[inputCommand.commandIndex].GetParameters()[HintArgumentIndex];
-            
-            TextBuilder.Clear();
-            TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>< </color>");
-            TextBuilder.Append($"{parameterInfo.ParameterType.Name}");
-            TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}> ></color>");
+        if (inputCommand.commandIndex != -1 && inputCommand.argumentCount > 0) {
+            ParameterInfo[] methodParameters = Commands[inputCommand.commandIndex].GetParameters();
+            if (inputCommand.argumentCount < methodParameters.Length) {
+                
             
             
-            GUIContent argumentHint = new ($"< {parameterInfo.ParameterType.Name} >");
-            Vector2 inputTextSize = consoleSkin.textField.CalcSize(inputFieldText);
-            Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
-            
-            Rect argumentHintRect = new (consoleInputDrawPos, consoleInputSize);
-            argumentHintRect.position += new Vector2(inputTextSize.x + Style.ArgumentTypeHintSpacing, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeOffsetAmount);
-            argumentHintRect.width = Mathf.Clamp(argumentHintSize.x, 0, Mathf.Max(0, inputFieldRect.xMax - argumentHintRect.position.x));
-            
-            GUI.contentColor = Style.InputArgumentType;
-            argumentHint.text = TextBuilder.ToString();
-            GUI.Label(argumentHintRect, argumentHint);
+                TextBuilder.Clear();
+                TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>< </color>");
+                TextBuilder.Append($"{methodParameters[inputCommand.argumentCount].ParameterType.Name}");
+                TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}> ></color>");
+                
+                
+                GUIContent argumentHint = new ($"< {methodParameters[inputCommand.argumentCount].ParameterType.Name} >");
+                Vector2 inputTextSize = consoleSkin.textField.CalcSize(inputFieldText);
+                Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
+                
+                Rect argumentHintRect = new (consoleInputDrawPos, consoleInputSize);
+                argumentHintRect.position += new Vector2(inputTextSize.x + Style.ArgumentTypeHintSpacing, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeOffsetAmount);
+                argumentHintRect.width = Mathf.Clamp(argumentHintSize.x, 0, Mathf.Max(0, inputFieldRect.xMax - argumentHintRect.position.x));
+                
+                GUI.contentColor = Style.InputArgumentType;
+                argumentHint.text = TextBuilder.ToString();
+                GUI.Label(argumentHintRect, argumentHint);
+            }
         }
         
         
@@ -444,10 +480,11 @@ public class DevConsole : MonoBehaviour
          */
         GUI.contentColor = Color.yellow;
         
+        /*
+         * TODO old dumb value, change asap
+         */
         GUIContent debug = new () {
-            text = $"Hint argument index: {HintArgumentIndex}\n" +
-                   $"Hint type: {HintType[Mathf.Max(0,HintArgumentIndex)].Name}\n" +
-                   $"Selected Hint Index: {selectedHint}\n" +
+            text = $"Selected Hint Index: {selectedHint}\n" +
                    $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}"
         };
         Vector2 size = consoleSkin.box.CalcSize(debug);
@@ -536,11 +573,12 @@ public class DevConsole : MonoBehaviour
     }
 
 
-    int ParseInputForHints() {
+    int ParseHints() {
         int hintsFound = 0;
         
         /*
          * Command history hints
+         * TODO these are fucked atm, showing up in the middle of writing arguments
          */
         if (CommandHistoryState != History.HIDE) {
             for (int i = 0; i < HistoryCommands.Count; i++) {
@@ -555,15 +593,10 @@ public class DevConsole : MonoBehaviour
         }
         
         
-        if (inputCommand.HasText() == false) {
-            return hintsFound;
-        }
-        
         // TODO wanna add sorting based on how many matches we have, best result at the top
         // Fill with commands that match
-        if (inputCommand.DisplayCommandHints()) {
-            HintArgumentIndex = -1;
-            string[] inputWords = inputCommand.inputText.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
+        if (inputCommand.commandIndex == -1) {
+            string[] inputWords = inputCommand.inputContent.text.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
            
             for (int i = 0; i < totalCommandCount; i++) {
                 if (hintsFound == MAX_HINTS) break;
@@ -579,7 +612,7 @@ public class DevConsole : MonoBehaviour
                 if (matchingHint) {
                     HintContent[hintsFound].text = Commands[i].GetFullHint();
                     HintIndex[hintsFound] = i;
-                    HintType[hintsFound] = COMMAND_TYPE;
+                    HintValue[hintsFound] = Commands[i];
                     hintsFound++;
                 }
             }
@@ -610,28 +643,8 @@ public class DevConsole : MonoBehaviour
          * trim/remove just moves temp index
          * how to handle the gui.textfield inputs tho?
          */
-        // Ugly string stuff
-        string inputText = inputCommand.inputText;
-        inputText = inputText.Remove(0, Commands[commandIndex].GetDisplayName().Length).TrimStart(SPACE);
-        for (int i = 0; i < argumentCount; i++) {
-            int argumentLength = inputCommand.inputArgumentName[i].Length;
-            if (i == argumentCount - 1 && argumentLength == inputText.Length) {
-                argumentCount--;
-            }
-            else {
-                inputText = inputText.Remove(0, argumentLength).TrimStart(SPACE);
-            }
-        }
-
-        if (HintArgumentIndex != argumentCount) {
-            argumentHintBump = 0;
-        }
-        HintArgumentIndex = argumentCount;
         
-        
-        string[] inputWithoutMatches = inputText.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
-        
-        
+        string[] inputWithoutMatches = inputCommand.inputContent.text.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
         Type argumentType = Commands[commandIndex].GetParameterType(argumentCount);
 
         /*
@@ -640,11 +653,11 @@ public class DevConsole : MonoBehaviour
 
         if (argumentType == typeof(bool)) {
             HintContent[hintsFound].text = bool.TrueString;
-            HintType[hintsFound] = argumentType;
+            HintValue[hintsFound] = true;
             hintsFound++;
             
             HintContent[hintsFound].text = bool.FalseString;
-            HintType[hintsFound] = argumentType;
+            HintValue[hintsFound] = false;
             hintsFound++;
             return hintsFound;
         }
@@ -673,7 +686,7 @@ public class DevConsole : MonoBehaviour
                 if (containsWord) {
                     HintContent[hintsFound].text = namesInsideEnum[i];
                     HintIndex[hintsFound] = i;
-                    HintType[hintsFound] = argumentType;
+                    HintValue[hintsFound] = argumentType.GetEnumValues().GetValue(i);
                     hintsFound++;
                 }
             }
@@ -706,8 +719,7 @@ public class DevConsole : MonoBehaviour
 
                 if (containsWord) {
                     HintContent[hintsFound].text = asset.name;
-                    HintIndex[hintsFound] = i;
-                    HintType[hintsFound] = SO_TYPE;
+                    HintValue[hintsFound] = asset;
                     hintsFound++;
                 }
             }
@@ -715,6 +727,40 @@ public class DevConsole : MonoBehaviour
             return hintsFound;
         }
 
+        
+        
+        /*
+         * try parse string to argument type and display "Apply Value" hint if its valid, and always select the hint
+         */
+        
+        
+        TypeConverter typeConverter = TypeDescriptor.GetConverter(argumentType);
+        if (typeConverter.CanConvertFrom(typeof(string))) {
+            object stringToValue = null;
+            try {
+                stringToValue = typeConverter.ConvertFromString(inputCommand.inputContent.text);
+            }
+            catch {
+                // ignored
+            }
+
+            if (stringToValue != null) {
+                HintContent[hintsFound].text = VALID_VALUE_HINT;
+                HintValue[hintsFound] = stringToValue;
+                hintsFound++;
+                selectedHint = 0;
+            }
+            else {
+                HintContent[hintsFound].text = INVALID_VALUE_HINT;
+                HintValue[hintsFound] = null;
+                hintsFound++;
+                selectedHint = -1;
+            }
+                
+            return hintsFound;
+        }
+        
+        
         /*
          * prob wanna display what command and name of argument it's related too as well, but also not inside the hint box
          */
@@ -724,285 +770,35 @@ public class DevConsole : MonoBehaviour
         // inputHints[hintsFound++].SetHint(TextBuilder);
         return hintsFound;
     }
-    
 
-    /*
-     * TODO remove 'ignoreSpacingRequirement' bool, it was used to keep hints active after first matching command was found but
-     * the logic has been changed to hints checking if they should keep displaying or not
-     * 03-12 -> logic inside InputCommand.DisplayCommandHints()
-     */
-    
-    void ParseInputForCommandsAndArguments() {
-        inputCommand.RemoveSelection();
-        if (inputCommand.HasText() == false) return;
-        /*
-         * int checkIndex = 0;
-         * can remove string and use [checkIndex..^1]
-         */
-        string inputText = inputCommand.inputText;
-        
-        
-        /*
-         * Commands
-         */
-
-        int matchingCommandIndex = -1;
-        int longestCommandName = -1;
-
-        for (int i = 0; i < totalCommandCount; i++) {
-             if (inputText.StartsWith(Commands[i].GetDisplayName(), StringComparison.InvariantCultureIgnoreCase) == false)
-                 continue;
-             int lengthOfInput = Commands[i].GetDisplayName().Length;
-             if (lengthOfInput > longestCommandName) {
-                 matchingCommandIndex = i;
-                 longestCommandName = lengthOfInput;
-             }
-        }
-
-        /*
-         * this will select a command if you have 2 with the same name and one is longer
-         * ex. LoadScene -> LoadSceneTwo
-         * the first one will get selected, maybe add something that waits until whitespace to hide hint menu?
-         */
-        if (matchingCommandIndex != -1) {
-            if (inputText.Length >= longestCommandName) {
-                inputText = inputText.Remove(0, longestCommandName);
-                inputCommand.SelectCommand(matchingCommandIndex);
-            }
-        }
-
-
-
-        
-        
-        
-        /*
-         * Arguments
-         */
-
-        if (inputCommand.HasCommand() == false) return;
-        /*
-         * if we reach this, then 'matchingCommandIndex' will be set
-         * Look into how to parse string, would be nice to have " or ' encapsulation 
-         */
-
-        
-        
-        int paramCount = Commands[matchingCommandIndex].GetParameterCount();
-        for (int i = 0; i < paramCount; i++) {
-            // We remove parts of the string for matching arguments so if we get to a loop when it's empty, were done!
-            if (string.IsNullOrEmpty(inputText)) break;
-            inputText = inputText.TrimStart(SPACE);
-            Type argumentType = Commands[matchingCommandIndex].GetParameterType(i);
-
-            /*
-             * Bool
-             */
-            
-            if (argumentType == typeof(bool)) {
-                if (inputText.StartsWith(bool.TrueString, StringComparison.InvariantCultureIgnoreCase)) {
-                    inputText = inputText.Remove(0, bool.TrueString.Length);
-                    inputCommand.inputArgumentName[inputCommand.argumentCount] = bool.TrueString;
-                    inputCommand.inputArgumentValue[inputCommand.argumentCount] = true;
-                    inputCommand.argumentCount++;
-                }
-                else if (inputText.StartsWith(bool.FalseString, StringComparison.InvariantCultureIgnoreCase)) {
-                    inputText = inputText.Remove(0, bool.FalseString.Length);
-                    inputCommand.inputArgumentName[inputCommand.argumentCount] = bool.FalseString;
-                    inputCommand.inputArgumentValue[inputCommand.argumentCount] = false;
-                    inputCommand.argumentCount++;
-                }
-                
-                continue;
-            }
-            
-            
-            /*
-             * Enums
-             */
-
-
-            if (argumentType.IsEnum) {
-                string[] namesInsideEnum = argumentType.GetEnumNames();
-                int longestEnumMatch = -1;
-                int matchingEnumIndex = -1;
-
-                for (int enumIndex = 0; enumIndex < namesInsideEnum.Length; enumIndex++) {
-                    if (inputText.StartsWith(namesInsideEnum[enumIndex], StringComparison.InvariantCultureIgnoreCase) == false) 
-                        continue;
-                    
-                    int enumLength = namesInsideEnum[enumIndex].Length;
-                    if (enumLength > longestEnumMatch) {
-                        longestEnumMatch = enumLength;
-                        matchingEnumIndex = enumIndex;
-                    }
-                }
-
-                if (matchingEnumIndex != -1) {
-                    inputText = inputText.Remove(0, longestEnumMatch);
-                    /*
-                     * TODO will sending a raw int to enum argument work?
-                     */
-                    inputCommand.inputArgumentName[inputCommand.argumentCount] = namesInsideEnum[matchingEnumIndex];
-                    inputCommand.inputArgumentValue[inputCommand.argumentCount] = matchingEnumIndex;
-                    inputCommand.argumentCount++;
-                }
-                
-                continue;
-            }
-            
-            
-            /*
-             * ScriptableObjects
-             */
-
-            if (SO_TYPE.IsAssignableFrom(argumentType)) {
-                int longestAssetMatch = -1;
-                int matchingAssetIndex = -1;
-
-                for (int assetIndex = 0; assetIndex < Cache.AssetReferences.Length; assetIndex++) {
-                    if (inputText.StartsWith(Cache.AssetNames[assetIndex], StringComparison.InvariantCultureIgnoreCase) == false)
-                        continue;
-
-                    int nameLength = Cache.AssetNames[assetIndex].Length;
-                    if (nameLength > longestAssetMatch) {
-                        longestAssetMatch = nameLength;
-                        matchingAssetIndex = assetIndex;
-                    }
-                }
-
-                if (matchingAssetIndex != -1) {
-                    inputText = inputText.Remove(0, longestAssetMatch);
-                    inputCommand.inputArgumentName[inputCommand.argumentCount] = Cache.AssetNames[matchingAssetIndex];
-                    inputCommand.inputArgumentValue[inputCommand.argumentCount] = Cache.AssetReferences[matchingAssetIndex];
-                    inputCommand.argumentCount++;
-                }
-                
-                continue;
-            }
-            
-            
-            
-            /*
-             * Strings
-             * Look into how to parse string, would be nice to have " or ' encapsulation
-             */
-
-
-            if (argumentType == typeof(string)) {
-                int markersFound = 0;
-                int validStringLength = -1;
-                
-                for (int strLen = 0; strLen < inputText.Length; strLen++) {
-                    bool isMarker = inputText[strLen] == STRING_MARKER;
-                    if (markersFound == 0 && isMarker == false) {
-                        break; 
-                    }
-
-                    if (isMarker) {
-                        markersFound++;
-                        if (markersFound == 2) {
-                            validStringLength = strLen+1;
-                            break;
-                        }
-                    }
-                    else if (markersFound == 0) {
-                        break; // string doesnt start with marker
-                    }
-                }
-
-                if (validStringLength != -1) {
-                    if (inputText.Length >= validStringLength) {
-                        string argumentString = inputText[..validStringLength];
-                        inputText = inputText.Remove(0, validStringLength);
-                        inputCommand.inputArgumentName[inputCommand.argumentCount] = argumentString;
-                        inputCommand.inputArgumentValue[inputCommand.argumentCount] = argumentString[1..^1];
-                        inputCommand.argumentCount++;
-                    }
-                }
-                
-                
-                continue;
-            }
-            
-            
-            
-            
-            /*
-             * All other that can be converted from string
-             * int, float, byte
-             */
-            
-            TypeConverter typeConverter = TypeDescriptor.GetConverter(argumentType);
-            if (typeConverter.CanConvertFrom(typeof(string))) {
-                string firstPossibleValue = inputText.Split(SPACE)[0];
-
-                object stringToValue = null;
-                try {
-                    stringToValue = typeConverter.ConvertFromString(firstPossibleValue);
-                }
-                catch {
-                    // ignored
-                }
-
-                if (stringToValue != null) {
-                    if (inputText.Length >= firstPossibleValue.Length) {
-                        inputText = inputText.Remove(0, firstPossibleValue.Length);
-                        inputCommand.inputArgumentName[inputCommand.argumentCount] = firstPossibleValue;
-                        inputCommand.inputArgumentValue[inputCommand.argumentCount] = stringToValue;
-                        inputCommand.argumentCount++;
-                    }
-                }
-                
-                continue;
-            }
-            
-            
-            break; // input value doesn't match any argument type, stop looking since we're doing them in order 
-        }
-    }
-    
-    
 
     class InputCommand {
-        internal string inputText;
+        internal GUIContent inputContent = new ();
         internal int commandIndex;
-        internal string[] inputArgumentName = new string[12];
+        internal GUIContent[] inputArgumentName = new GUIContent[12];
         internal object[] inputArgumentValue = new object[12];
         internal int argumentCount;
+        internal GUIContent commandContent = new ();
         
         internal void Clear() {
-            inputText = string.Empty;
-            commandIndex = -1;
+            inputContent.text = string.Empty;
             argumentCount = 0;
-        }
-        internal void RemoveSelection() {
             commandIndex = -1;
-            argumentCount = 0;
-        }
-        internal void SelectCommand(int matchingCommandIndex) => commandIndex = matchingCommandIndex;
-        internal bool HasText() => string.IsNullOrEmpty(inputText) == false;
-        internal bool HasCommand() => commandIndex != -1;
-        internal bool DisplayCommandHints() {
-            return commandIndex == -1 || Commands[commandIndex].GetDisplayName().Length == inputText.Length;
         }
         
+        internal bool HasText() => string.IsNullOrEmpty(inputContent.text) == false;
         
- 
-        /*
-         * something is wacky here..
-         * we are showing hints for the previous argument if the inputText isnt longer than the pure cmd + arg strings
-         * why doesnt 
-         */
+
         internal void UseHint(int indexOfHint) {
-            TextBuilder.Clear();
-            
+            inputContent.text = string.Empty;
+            argumentHintBump = 0;
             /*
              * Are we doing a history command?
+             * TODO change this to just input a history type value, wanna avoid string stuff
              */
             if (CommandHistoryState == History.SHOW) {
-                TextBuilder.Append(HintContent[indexOfHint].text);
-                inputText = TextBuilder.ToString();
+                inputContent.text = string.Empty;
+                Debug.LogError("History not implemented yet");
                 return;
             }
             
@@ -1011,9 +807,9 @@ public class DevConsole : MonoBehaviour
             /*
              * When applying command hint
              */
-            if (HintType[indexOfHint] == COMMAND_TYPE) {
-                TextBuilder.Append($"{Commands[HintIndex[indexOfHint]].GetDisplayName()}{SPACE}");
-                inputText = TextBuilder.ToString();
+            if (HintValue[indexOfHint].GetType() == COMMAND_TYPE) { 
+                commandIndex = HintIndex[indexOfHint];
+                commandContent.text = Commands[commandIndex].GetDisplayName();
                 return;
             }
 
@@ -1021,24 +817,22 @@ public class DevConsole : MonoBehaviour
             /*
              * When applying argument hint
              */
-        
-            TextBuilder.Append($"{Commands[commandIndex].GetDisplayName()}{SPACE}");
-            
-            for (int i = 0; i < argumentCount; i++) {
-                /*
-                 * This break here is the fellow that is making sure we don't double write the
-                 * last argument if we're replacing it instead of adding a new argument to the end
-                 */
-                if (HintArgumentIndex == i) break;
-                TextBuilder.Append($"{inputArgumentName[i]}{SPACE}");
-            }
 
-            TextBuilder.Append($"{HintContent[indexOfHint].text}{SPACE}");
-            inputText = TextBuilder.ToString();
+            object argumentValue = HintValue[indexOfHint];
+            if (argumentValue.GetType().IsAssignableFrom(SO_TYPE)) {
+                inputArgumentName[argumentCount].text = HintContent[indexOfHint].text;
+                inputArgumentValue[argumentCount] = argumentValue;
+            }
+            else {
+                inputArgumentName[argumentCount].text = argumentValue.ToString();
+                inputArgumentValue[argumentCount] = argumentValue;
+            }
+            
+            argumentCount++;
         }
         
         internal bool CanExecuteCommand() {
-            if (HasCommand() == false) return false;
+            if (commandIndex == -1) return false;
             
             ParameterInfo[] arguments = Commands[commandIndex].GetParameters();
             for (int i = argumentCount; i < arguments.Length; i++) {
