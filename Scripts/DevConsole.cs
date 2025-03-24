@@ -91,8 +91,8 @@ public class DevConsole : MonoBehaviour
      * use helper methods to manipulate char[] without adding memory
      */
     static readonly StringBuilder TextBuilder = new (256);
+    static readonly List<HistoryCommand> HistoryCommands = new (32);
     readonly InputCommand inputCommand = new ();
-    readonly List<string> HistoryCommands = new (32);
     bool isActive;
     int moveMarkerToEnd;
     int selectedHint;
@@ -199,14 +199,33 @@ public class DevConsole : MonoBehaviour
     
     [DevCommand]
     void SaveCommandHistory() {
-        File.WriteAllLines(CommandHistoryPath, HistoryCommands);
+        // TextBuilder.Clear();
+        // TextBuilder.EnsureCapacity(4096);
+        //
+        // foreach (HistoryCommand cmd in HistoryCommands) {
+        //     TextBuilder.AppendLine((cmd.argumentValues.Length + 1).ToString());
+        //     TextBuilder.AppendLine(Commands[cmd.commandIndex].GetDisplayName());
+        //     foreach (string argName in cmd.argumentDisplayName) {
+        //         TextBuilder.AppendLine(argName);
+        //     }
+        // }
+        //
+        // File.WriteAllText(CommandHistoryPath, TextBuilder.ToString());
     }
     
     [DevCommand]
     void LoadCommandHistory() {
-        HistoryCommands.Clear();
-        HistoryCommands.AddRange(File.ReadAllLines(CommandHistoryPath));
-        HistoryCommands.Reverse();
+        // HistoryCommands.Clear();
+        // string[] historyTextFile = File.ReadAllLines(CommandHistoryPath);
+        // int currentReadIndex = 0;
+        // while (currentReadIndex < historyTextFile.Length) {
+        //     int commandLineCount = int.Parse(historyTextFile[++currentReadIndex]);
+        //     HistoryCommand cmd = new ();
+        //     
+        // }
+
+        // HistoryCommands.AddRange(File.ReadAllLines(CommandHistoryPath));
+        // HistoryCommands.Reverse();
     }
 
     [DevCommand]
@@ -379,15 +398,29 @@ public class DevConsole : MonoBehaviour
         }
 
 
-
-
-
+        
         if (inputCommand.CanExecuteCommand() && inputEvent.ExecuteCommand(false)) {
-            if (inputCommand.TryExecuteCommand()) {
+            if (inputCommand.TryExecuteCommand(out HistoryCommand historyCommand)) {
                 inputEvent.Use();
 
-                HistoryCommands.Remove(inputCommand.inputContent.text);
-                HistoryCommands.Insert(0, inputCommand.inputContent.text);
+                for (int i = 0; i < HistoryCommands.Count; i++) {
+                    if (historyCommand.commandIndex != HistoryCommands[i].commandIndex) continue;
+                    if (historyCommand.argumentValues.Length != HistoryCommands[i].argumentValues.Length) continue;
+                    bool hasSameArguments = true;
+                    for (int k = 0; k < historyCommand.argumentValues.Length; k++) {
+                        if (historyCommand.argumentValues[k] != HistoryCommands[i].argumentValues[k]) {
+                            hasSameArguments = false;
+                            break;
+                        }
+                    }
+
+                    if (hasSameArguments) {
+                        HistoryCommands.RemoveAt(i);
+                        break;
+                    }
+                }
+                
+                HistoryCommands.Insert(0, historyCommand);
                 if (HistoryCommands.Count > 32) {
                     HistoryCommands.RemoveAt(HistoryCommands.Count - 1);
                 }
@@ -578,7 +611,7 @@ public class DevConsole : MonoBehaviour
             for (int i = 0; i < HistoryCommands.Count; i++) {
                 if (hintsFound == MAX_HINTS) break;
 
-                HintContent[hintsFound].text = HistoryCommands[i];
+                HintContent[hintsFound].text = HistoryCommands[i].displayString;
                 HintIndex[hintsFound] = i;
                 hintsFound++;
             }
@@ -641,6 +674,8 @@ public class DevConsole : MonoBehaviour
         string[] inputWithoutMatches = inputCommand.inputContent.text.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
         Type argumentType = Commands[commandIndex].GetParameterType(argumentCount);
 
+        
+        
         /*
          * Bool
          */
@@ -655,8 +690,6 @@ public class DevConsole : MonoBehaviour
             hintsFound++;
             return hintsFound;
         }
-
-        
         
         
         
@@ -765,11 +798,11 @@ public class DevConsole : MonoBehaviour
 
     class InputCommand {
         internal GUIContent inputContent = new ();
-        internal int commandIndex;
+        internal GUIContent commandContent = new ();
         internal GUIContent[] inputArgumentName = new GUIContent[12];
         readonly object[] inputArgumentValue = new object[12];
+        internal int commandIndex;
         internal int argumentCount;
-        internal GUIContent commandContent = new ();
         
         internal void Clear() {
             inputContent.text = string.Empty;
@@ -780,13 +813,22 @@ public class DevConsole : MonoBehaviour
         internal void UseHint(int indexOfHint) {
             inputContent.text = string.Empty;
             argumentHintBump = 0;
+            
             /*
-             * Are we doing a history command?
-             * TODO change this to just input a history type value, wanna avoid string stuff
+             * Are we applying from history?
              */
+            
             if (CommandHistoryState == History.SHOW) {
+                HistoryCommand historyCommand = HistoryCommands[HintIndex[indexOfHint]];
+                commandIndex = historyCommand.commandIndex;
+                commandContent.text = Commands[commandIndex].GetDisplayName();
+                
+                argumentCount = historyCommand.argumentValues.Length;
+                for (int i = 0; i < argumentCount; i++) {
+                    inputArgumentValue[i] = historyCommand.argumentValues[i];
+                    inputArgumentName[i].text = historyCommand.argumentDisplayName[i];
+                }
                 inputContent.text = string.Empty;
-                Debug.LogError("History not implemented yet");
                 return;
             }
             
@@ -802,6 +844,7 @@ public class DevConsole : MonoBehaviour
             }
 
             
+            
             /*
              * When applying argument hint
              */
@@ -809,12 +852,11 @@ public class DevConsole : MonoBehaviour
             object argumentValue = HintValue[indexOfHint];
             if (SO_TYPE.IsAssignableFrom(argumentValue.GetType())) {
                 inputArgumentName[argumentCount].text = HintContent[indexOfHint].text;
-                inputArgumentValue[argumentCount] = argumentValue;
             }
             else {
                 inputArgumentName[argumentCount].text = argumentValue.ToString();
-                inputArgumentValue[argumentCount] = argumentValue;
             }
+            inputArgumentValue[argumentCount] = argumentValue;
             
             argumentCount++;
         }
@@ -827,13 +869,20 @@ public class DevConsole : MonoBehaviour
             }
             return true;
         }
-        internal bool TryExecuteCommand() {
+        internal bool TryExecuteCommand(out HistoryCommand historyCommand) {
+            historyCommand = new HistoryCommand();
+
+            TextBuilder.Clear();
+            TextBuilder.Append($"{Commands[commandIndex].GetDisplayName()}{SPACE}");
+            
             List<Object> target = Commands[commandIndex].GetTargets();
             ParameterInfo[] parameters = Commands[commandIndex].GetParameters();
+            
             object[] argumentValues = new object[parameters.Length];
             for (int i = 0; i < argumentValues.Length; i++) {
                 if (i < argumentCount) {
                     argumentValues[i] = inputArgumentValue[i];
+                    TextBuilder.Append($"{inputArgumentName[i].text}{SPACE}");
                 }
                 else {
                     if (parameters[i].HasDefaultValue == false) 
@@ -849,8 +898,14 @@ public class DevConsole : MonoBehaviour
                 }
                 Commands[commandIndex].GetMethod().Invoke(target[i], argumentValues);
             }
-            
-            
+
+            historyCommand.commandIndex = commandIndex;
+            historyCommand.argumentValues = inputArgumentValue[..argumentCount];
+            historyCommand.argumentDisplayName = new string[argumentCount];
+            for (int i = 0; i < argumentCount; i++) {
+                historyCommand.argumentDisplayName[i] = inputArgumentName[i].text;
+            }
+            historyCommand.displayString = TextBuilder.ToString();
             return true;
         }
     }
@@ -892,6 +947,13 @@ public class DevConsole : MonoBehaviour
         internal Type GetParameterType(int index) => parameters[index].ParameterType;
         internal ParameterInfo[] GetParameters() => parameters;
         internal List<Object> GetTargets() => targets;
+    }
+
+    struct HistoryCommand {
+        internal string displayString;
+        internal int commandIndex;
+        internal object[] argumentValues;
+        internal string[] argumentDisplayName;
     }
 }
 
