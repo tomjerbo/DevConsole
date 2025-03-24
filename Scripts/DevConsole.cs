@@ -19,8 +19,6 @@ using Object = UnityEngine.Object;
  * ----------- TODO LIST ----------------
  * Check how generic parameters are handled
  * Check how override methods are handled
- * Hard select commands and arguments, segment input into each part
- * Offset hint menu inline with argument position
  * Add toast menu for executed commands
  *
  *
@@ -54,8 +52,6 @@ public class DevConsole : MonoBehaviour
     
     const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
-    const string VALID_VALUE_HINT = "[Valid Input]";
-    const string INVALID_VALUE_HINT = "[In-Valid Input]";
     const int MAX_HINTS = 32;
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
@@ -295,8 +291,8 @@ public class DevConsole : MonoBehaviour
         Event inputEvent = Event.current;
         GUI.skin = consoleSkin;
         
-        selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectionBumpSpeed * Time.unscaledDeltaTime);
-        argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgumentTypeSpeed * Time.unscaledDeltaTime);
+        selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectHintBumpSpeed * Time.unscaledDeltaTime);
+        argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgumentTypeHelpSpeed * Time.unscaledDeltaTime);
         bool windowHasFocus = GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID;
 
         /*
@@ -345,14 +341,14 @@ public class DevConsole : MonoBehaviour
                     --inputCommand.argumentCount;
                     inputCommand.inputContent.text = inputCommand.inputArgumentName[inputCommand.argumentCount].text;
                     moveMarkerToEnd = 2;
-                    selectionBump = 0;
+                    argumentHintBump = 0;
                     inputEvent.Use();
                 }
                 else if (inputCommand.commandIndex != -1) {
                     inputCommand.inputContent.text = inputCommand.commandContent.text;
                     inputCommand.commandIndex = -1;
                     moveMarkerToEnd = 2;
-                    selectionBump = 0;
+                    argumentHintBump = 0;
                     inputEvent.Use();
                 }
             }
@@ -454,7 +450,7 @@ public class DevConsole : MonoBehaviour
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
         Rect inputFieldRect = new (consoleInputBackground) {
             x = drawPosX,
-            width = consoleSkin.textField.CalcSize(inputCommand.inputContent).x + WIDTH_SPACING
+            width = consoleInputBackground.width - (drawPosX - consoleInputBackground.x)
         };
         string inputText = GUI.TextField(inputFieldRect, inputFieldText.text);
         if (inputText != inputCommand.inputContent.text) {
@@ -478,11 +474,11 @@ public class DevConsole : MonoBehaviour
                 GUIContent argumentHint = new ($"< {methodParameters[inputCommand.argumentCount].ParameterType.Name} >");
                 Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
                 Rect argumentHintRect = new (inputFieldRect) {
-                    x = inputFieldRect.xMax,
+                    x = inputFieldRect.x + consoleSkin.textField.CalcSize(inputCommand.inputContent).x,
                     width = argumentHintSize.x,
                 };
                 
-                argumentHintRect.position += new Vector2(Style.ArgumentTypeHintSpacing, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeOffsetAmount);
+                argumentHintRect.position += new Vector2(Style.ArgumentTypeHelpOffset, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeHelpOffsetAmount);
                 
                 GUI.contentColor = Style.InputArgumentType;
                 argumentHint.text = TextBuilder.ToString();
@@ -525,14 +521,14 @@ public class DevConsole : MonoBehaviour
                 maximumWidth = Mathf.Max(hintTextSize.x, maximumWidth);
                 maximumHeight += hintTextSize.y + HINT_HEIGHT_TEXT_PADDING;
             }
-            maximumWidth += Style.SelectionBumpOffsetAmount;
+            maximumWidth += Style.SelectHintBumpOffsetAmount;
             
             
             GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
             Rect hintBackground = new (inputFieldRect) {
                 width = maximumWidth,
                 height = maximumHeight,
-                y = consoleInputDrawPos.y + 1 - maximumHeight,
+                y = consoleInputDrawPos.y - maximumHeight + 2,
             };
             
             
@@ -542,7 +538,7 @@ public class DevConsole : MonoBehaviour
             for (int i = 0; i < hintsToDisplay; i++) {
                 bool isSelected = i == selectedHint;
             
-                float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectionBumpOffsetAmount : 0;
+                float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount : 0;
                 Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
                 
                 GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
