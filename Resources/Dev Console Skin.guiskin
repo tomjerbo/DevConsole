@@ -78,7 +78,7 @@ MonoBehaviour:
     m_ContentOffset: {x: 0, y: 0}
     m_FixedWidth: 0
     m_FixedHeight: 0
-    m_StretchWidth: 1
+    m_StretchWidth: 0
     m_StretchHeight: 0
   m_button:
     m_Name: button
@@ -261,8 +261,8 @@ MonoBehaviour:
     m_Padding:
       m_Left: 8
       m_Right: 8
-      m_Top: 2
-      m_Bottom: 4
+      m_Top: 0
+      m_Bottom: 0
     m_Overflow:
       m_Left: 0
       m_Right: 0
@@ -279,12 +279,12 @@ MonoBehaviour:
     m_ContentOffset: {x: 0, y: 0}
     m_FixedWidth: 0
     m_FixedHeight: 0
-    m_StretchWidth: 1
-    m_StretchHeight: 1
+    m_StretchWidth: 0
+    m_StretchHeight: 0
   m_textField:
     m_Name: textfield
     m_Normal:
-      m_Background: {fileID: 0}
+      m_Background: {fileID: 2800000, guid: 51bed27bcb9599740ae65bfd39c9b180, type: 3}
       m_ScaledBackgrounds: []
       m_TextColor: {r: 1, g: 1, b: 1, a: 1}
     m_Hover:
@@ -316,10 +316,10 @@ MonoBehaviour:
       m_ScaledBackgrounds: []
       m_TextColor: {r: 1, g: 1, b: 1, a: 1}
     m_Border:
-      m_Left: 3
-      m_Right: 3
-      m_Top: 3
-      m_Bottom: 3
+      m_Left: 0
+      m_Right: 0
+      m_Top: 0
+      m_Bottom: 0
     m_Margin:
       m_Left: 0
       m_Right: 0
@@ -333,10 +333,10 @@ MonoBehaviour:
     m_Overflow:
       m_Left: 0
       m_Right: 0
-      m_Top: 4
-      m_Bottom: 4
+      m_Top: 0
+      m_Bottom: 0
     m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 32
+    m_FontSize: 24
     m_FontStyle: 0
     m_Alignment: 3
     m_WordWrap: 0

@@ -14,7 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   BorderColor: {r: 0.3207547, g: 0.3207547, b: 0.3207547, a: 1}
   InputTextDefault: {r: 0.9019608, g: 0.9019608, b: 0.9019608, a: 1}
-  InputValidCommand: {r: 1, g: 0.6862745, b: 0.34117648, a: 1}
+  SelectedCommand: {r: 1, g: 0.6862745, b: 0.34117648, a: 1}
+  SelectedArgument: {r: 0.5518868, g: 0.88932985, b: 1, a: 1}
+  ValidCommand: {r: 1, g: 0.6862745, b: 0.34117648, a: 1}
   InputArgumentType: {r: 0.47843137, g: 0.6284237, b: 0.754717, a: 1}
   InputArgumentTypeBorder: {r: 0.4245283, g: 0.4245283, b: 0.4245283, a: 1}
   HintTextColorDefault: {r: 0.5377358, g: 0.5377358, b: 0.5377358, a: 1}

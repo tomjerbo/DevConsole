@@ -61,7 +61,6 @@ public class DevConsole : MonoBehaviour
     const float HEIGHT_SPACING = 8f;
     const float HINT_HEIGHT_TEXT_PADDING = 2f;
     const char SPACE = ' ';
-    const char STRING_MARKER = '"';
     
     
     
@@ -294,9 +293,8 @@ public class DevConsole : MonoBehaviour
         float width = Screen.width;
         float height = Screen.height;
         Event inputEvent = Event.current;
-
-        GUISkin skin = GUI.skin;
         GUI.skin = consoleSkin;
+        
         selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectionBumpSpeed * Time.unscaledDeltaTime);
         argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgumentTypeSpeed * Time.unscaledDeltaTime);
         bool windowHasFocus = GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID;
@@ -338,6 +336,24 @@ public class DevConsole : MonoBehaviour
                     CommandHistoryState = History.HIDE;
                     moveMarkerToEnd = 2;
                     selectedHint = -1;
+                }
+            }
+
+
+            if (inputEvent.Backspace(false) && inputCommand.HasText() == false) {
+                if (inputCommand.argumentCount > 0) {
+                    --inputCommand.argumentCount;
+                    inputCommand.inputContent.text = inputCommand.inputArgumentName[inputCommand.argumentCount].text;
+                    moveMarkerToEnd = 2;
+                    selectionBump = 0;
+                    inputEvent.Use();
+                }
+                else if (inputCommand.commandIndex != -1) {
+                    inputCommand.inputContent.text = inputCommand.commandContent.text;
+                    inputCommand.commandIndex = -1;
+                    moveMarkerToEnd = 2;
+                    selectionBump = 0;
+                    inputEvent.Use();
                 }
             }
 
@@ -399,9 +415,8 @@ public class DevConsole : MonoBehaviour
 
         consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING + Style.ConsoleWindowHeight));
         consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, Style.ConsoleWindowHeight);
-
-
-        GUI.backgroundColor = Style.BorderColor;
+        
+        GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
         Rect consoleInputBackground = new(consoleInputDrawPos, consoleInputSize);
         GUI.Box(consoleInputBackground, string.Empty);
         
@@ -410,19 +425,20 @@ public class DevConsole : MonoBehaviour
         float[] db_argDrawPos = new float[inputCommand.argumentCount];
         
         GUI.backgroundColor = Color.clear;
-        GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.InputValidCommand : Style.InputTextDefault;
         float drawPosX = consoleInputBackground.x;
         if (inputCommand.commandIndex != -1) {
             
-            Rect commandRect = new Rect(consoleInputBackground) {
+            Rect commandRect = new (consoleInputBackground) {
                 width = consoleSkin.label.CalcSize(inputCommand.commandContent).x
             };
+            GUI.contentColor = Style.SelectedCommand;
             GUI.Label(commandRect, inputCommand.commandContent);
             drawPosX = commandRect.xMax - WIDTH_SPACING;
             dg_cmdRectPos = commandRect.x;
             
+            GUI.contentColor = Style.SelectedArgument;
             for (int i = 0; i < inputCommand.argumentCount; i++) {
-                Rect argRect = new Rect(commandRect) {
+                Rect argRect = new (commandRect) {
                     width = consoleSkin.label.CalcSize(inputCommand.inputArgumentName[i]).x,
                     x = drawPosX
                 };
@@ -433,50 +449,47 @@ public class DevConsole : MonoBehaviour
         }
         
         
-
+        GUI.contentColor = Style.InputTextDefault;
         GUIContent inputFieldText = new (inputCommand.inputContent);
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
-        Rect inputFieldRect = new Rect(consoleInputBackground) {
+        Rect inputFieldRect = new (consoleInputBackground) {
             x = drawPosX,
-            width = consoleSkin.textField.CalcSize(inputCommand.inputContent).x
+            width = consoleSkin.textField.CalcSize(inputCommand.inputContent).x + WIDTH_SPACING
         };
         string inputText = GUI.TextField(inputFieldRect, inputFieldText.text);
         if (inputText != inputCommand.inputContent.text) {
             CommandHistoryState = History.HIDE;
         }
         inputCommand.inputContent.text = inputText;
-        // ParseInputForCommandsAndArguments();
         
         
         /*
          * Draw argument hint box
          */
-
-        if (inputCommand.commandIndex != -1 && inputCommand.argumentCount > 0 && false) {
+        if (inputCommand.commandIndex != -1) {
             ParameterInfo[] methodParameters = Commands[inputCommand.commandIndex].GetParameters();
             if (inputCommand.argumentCount < methodParameters.Length) {
-                
-            
-            
                 TextBuilder.Clear();
-                TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>< </color>");
+                TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}><</color>");
                 TextBuilder.Append($"{methodParameters[inputCommand.argumentCount].ParameterType.Name}");
-                TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}> ></color>");
+                TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>></color>");
                 
                 
                 GUIContent argumentHint = new ($"< {methodParameters[inputCommand.argumentCount].ParameterType.Name} >");
-                Vector2 inputTextSize = consoleSkin.textField.CalcSize(inputFieldText);
                 Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
+                Rect argumentHintRect = new (inputFieldRect) {
+                    x = inputFieldRect.xMax,
+                    width = argumentHintSize.x,
+                };
                 
-                Rect argumentHintRect = new (consoleInputDrawPos, consoleInputSize);
-                argumentHintRect.position += new Vector2(inputTextSize.x + Style.ArgumentTypeHintSpacing, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeOffsetAmount);
-                argumentHintRect.width = Mathf.Clamp(argumentHintSize.x, 0, Mathf.Max(0, inputFieldRect.xMax - argumentHintRect.position.x));
+                argumentHintRect.position += new Vector2(Style.ArgumentTypeHintSpacing, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeOffsetAmount);
                 
                 GUI.contentColor = Style.InputArgumentType;
                 argumentHint.text = TextBuilder.ToString();
                 GUI.Label(argumentHintRect, argumentHint);
             }
         }
+        
         
         
         /*
@@ -493,13 +506,15 @@ public class DevConsole : MonoBehaviour
             debug.text += $"Arg {i} Draw Pos: {db_argDrawPos[i]}\n";
         }
         Vector2 size = consoleSkin.box.CalcSize(debug);
-        GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
+        if (true) {
+            GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
+        }
         
         
         
         
         /*
-         * Draw Command Hints
+         * Draw Hint Box
          */
         if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
             float maximumWidth = 0;
@@ -511,32 +526,18 @@ public class DevConsole : MonoBehaviour
                 maximumHeight += hintTextSize.y + HINT_HEIGHT_TEXT_PADDING;
             }
             maximumWidth += Style.SelectionBumpOffsetAmount;
-
-
-            float horizontalOffset = 0;
-            /*
-             * TODO figure out how to correctly get where to offset the hint menu
-             */
-            // if (inputCommand.HasCommand()) {
-            //     int charCount = Commands[inputCommand.commandIndex].GetDisplayName().Length;
-            //     for (int i = 0; i < HintArgumentIndex-1; i++) {
-            //         charCount += inputCommand.inputArgumentName[i].Length;
-            //     }
-            //
-            //     inputFieldText.text = inputFieldText.text[..charCount];
-            //     horizontalOffset = consoleSkin.textField.CalcSize(inputFieldText).x;
-            // }
             
-            GUI.backgroundColor = Style.BorderColor;
-            Rect hintBackgroundRect = new (consoleInputDrawPos + new Vector2(horizontalOffset, (maximumHeight + Style.HintWindowHeightOffset) * -1), new Vector2(maximumWidth, maximumHeight));
-            GUI.Box(hintBackgroundRect, "");
-            /*
-             * make into scroll region?
-             * or make a manual one
-             */
-            // GUI.BeginScrollView(hintBackgroundRect)
-        
-            Vector2 hintStartPos = hintBackgroundRect.position;
+            
+            GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
+            Rect hintBackground = new (inputFieldRect) {
+                width = maximumWidth,
+                height = maximumHeight,
+                y = consoleInputDrawPos.y + 1 - maximumHeight,
+            };
+            
+            
+            GUI.Box(hintBackground, string.Empty, consoleSkin.customStyles[0]);
+            Vector2 hintStartPos = hintBackground.position;
             float stepHeight = maximumHeight / hintsToDisplay;
             for (int i = 0; i < hintsToDisplay; i++) {
                 bool isSelected = i == selectedHint;
@@ -568,13 +569,6 @@ public class DevConsole : MonoBehaviour
             TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
             text.MoveTextEnd();
         }
-        
-        
-        
-        /*
-         * Reset gui skin
-         */
-        GUI.skin = skin;
     }
 
 
@@ -583,7 +577,6 @@ public class DevConsole : MonoBehaviour
         
         /*
          * Command history hints
-         * TODO these are fucked atm, showing up in the middle of writing arguments
          */
         if (CommandHistoryState != History.HIDE) {
             for (int i = 0; i < HistoryCommands.Count; i++) {
@@ -660,7 +653,7 @@ public class DevConsole : MonoBehaviour
             HintContent[hintsFound].text = bool.TrueString;
             HintValue[hintsFound] = true;
             hintsFound++;
-            
+                    
             HintContent[hintsFound].text = bool.FalseString;
             HintValue[hintsFound] = false;
             hintsFound++;
@@ -738,7 +731,6 @@ public class DevConsole : MonoBehaviour
          * try parse string to argument type and display "Apply Value" hint if its valid, and always select the hint
          */
         
-        
         TypeConverter typeConverter = TypeDescriptor.GetConverter(argumentType);
         if (typeConverter.CanConvertFrom(typeof(string))) {
             object stringToValue = null;
@@ -748,17 +740,15 @@ public class DevConsole : MonoBehaviour
             catch {
                 // ignored
             }
-
+            
+            HintContent[hintsFound].text = inputCommand.inputContent.text;
+            HintValue[hintsFound] = stringToValue;
+            hintsFound++;
+            
             if (stringToValue != null) {
-                HintContent[hintsFound].text = VALID_VALUE_HINT;
-                HintValue[hintsFound] = stringToValue;
-                hintsFound++;
                 selectedHint = 0;
             }
             else {
-                HintContent[hintsFound].text = INVALID_VALUE_HINT;
-                HintValue[hintsFound] = null;
-                hintsFound++;
                 selectedHint = -1;
             }
                 
@@ -781,7 +771,7 @@ public class DevConsole : MonoBehaviour
         internal GUIContent inputContent = new ();
         internal int commandIndex;
         internal GUIContent[] inputArgumentName = new GUIContent[12];
-        object[] inputArgumentValue = new object[12];
+        readonly object[] inputArgumentValue = new object[12];
         internal int argumentCount;
         internal GUIContent commandContent = new ();
         
@@ -821,7 +811,7 @@ public class DevConsole : MonoBehaviour
              */
 
             object argumentValue = HintValue[indexOfHint];
-            if (argumentValue.GetType().IsAssignableFrom(SO_TYPE)) {
+            if (SO_TYPE.IsAssignableFrom(argumentValue.GetType())) {
                 inputArgumentName[argumentCount].text = HintContent[indexOfHint].text;
                 inputArgumentValue[argumentCount] = argumentValue;
             }

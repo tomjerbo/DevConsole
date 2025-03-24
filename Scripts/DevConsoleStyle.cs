@@ -1,17 +1,23 @@
 using Jerbo.Inspector;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Jerbo.Tools {
-    // [CreateAssetMenu]
     public class DevConsoleStyle : ScriptableObject {
         public const string ASSET_PATH = "Dev Console Style";
         
-        [Tab("Colors", Tab.Color.Yellow)]
+        [Tab("Console Colors", Tab.Color.Yellow)]
         public Color BorderColor = Color.white;
         public Color InputTextDefault = Color.white;
-        public Color InputValidCommand = Color.white;
+        public Color SelectedCommand = Color.white;
+        public Color SelectedArgument = Color.white;
+        
+        [Space(12)]
+        public Color ValidCommand = Color.white;
         public Color InputArgumentType = Color.white;
         public Color InputArgumentTypeBorder = Color.white;
+        
+        [Space(12)]
         public Color HintTextColorDefault = Color.white;
         public Color HintTextColorSelected = Color.white;
 

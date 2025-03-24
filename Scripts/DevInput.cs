@@ -101,13 +101,23 @@ namespace Jerbo.Tools {
             return false;
         }
         
+        public static bool Backspace(this Event e, bool useOnSuccess = true) {
+            if (e.isKey && e.type == EventType.KeyDown && e.keyCode == BACKSPACE) {
+                if (useOnSuccess) e.Use();
+                return true;
+            }
+            
+            return false;
+        }
+        
         
         static KeyCode[] EXECUTE_COMMAND = { KeyCode.KeypadEnter, KeyCode.Return, };
-        static KeyCode[] CLOSE_CONSOLE = { KeyCode.LeftAlt, KeyCode.Escape, };
-        static KeyCode[] OPEN_CONSOLE = { KeyCode.LeftAlt };
+        static KeyCode[] CLOSE_CONSOLE = { KeyCode.F1, KeyCode.Escape, };
+        static KeyCode[] OPEN_CONSOLE = { KeyCode.F1 };
         static KeyCode[] INSERT_HINT = { KeyCode.KeypadEnter, KeyCode.Return, KeyCode.Tab };
         static KeyCode[] NAVIGATE_UP = { KeyCode.UpArrow, KeyCode.PageUp };
         static KeyCode[] NAVIGATE_DOWN = { KeyCode.DownArrow, KeyCode.PageDown };
-        
+        static KeyCode BACKSPACE = KeyCode.Backspace;
+
     }
 }
