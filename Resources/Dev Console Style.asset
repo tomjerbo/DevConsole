@@ -24,8 +24,8 @@ MonoBehaviour:
   ConsoleWindowHeight: 36
   SelectHintBumpOffsetAmount: 6
   SelectHintBumpSpeed: 12
-  ArgumentTypeHelpOffsetAmount: 12
-  ArgumentTypeHelpSpeed: 12
+  ArgumentTypeHelpOffsetAmount: -6
+  ArgumentTypeHelpSpeed: 8
   ArgumentTypeHelpOffset: 8
   SelectionBumpCurve:
     serializedVersion: 2
