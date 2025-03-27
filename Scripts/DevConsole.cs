@@ -22,6 +22,7 @@ using Object = UnityEngine.Object;
  * Check how override methods are handled
  * Add toast menu for executed commands
  *
+ * Load/Save location for builds is not the same as editor
  *
  * Make container ScriptableObject for DevConsole, have it spawn in console & hold references to data objects
  * so unity doesn't ignore them when building and it also removes need to load stuff from resources!
