@@ -203,7 +203,7 @@ public class DevConsole : MonoBehaviour
         if (HistoryCommands.Count == 0) return;
         
         TextBuilder.Clear();
-        TextBuilder.EnsureCapacity(4096*2);
+        TextBuilder.EnsureCapacity(4096);
         
         foreach (HistoryCommand cmd in HistoryCommands) {
             TextBuilder.AppendLine((cmd.argumentValues.Length + 2).ToString());
@@ -704,39 +704,26 @@ public class DevConsole : MonoBehaviour
         }
         
         
-        
-        /*
-         * drawdebug box
-         */
-        GUI.contentColor = Color.red;
-        GUI.backgroundColor = Style.BorderColor;
-        GUIContent debug = new () {
-            text = $"Selected Hint Index: {selectedHint}\n" +
-                   $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}\n" +
-                   $"CommandHistoryState: {CommandHistoryState}\n" + 
-                   $"HistoryCount: {HistoryCommands.Count}"
-        };
-
-
-        Vector2 size = consoleSkin.box.CalcSize(debug);
-        if (true) {
-            GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
-        }
-        
-        
-        
-        
         /*
          * DrawHintBox
          */
+        int hintsToDraw = 0;
+            float maximumHeight = 0;
         if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
             float maximumWidth = 0;
-            float maximumHeight = 0;
-        
+
+            float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxHeightPadding;
+            /*
+             * TODO if too many hints, show the x possible around the selected index, acting like a scrollbox
+             */
             for (int i = 0; i < hintsToDisplay; i++) {
                 Vector2 hintTextSize = consoleSkin.label.CalcSize(HintContent[i]);
+                if (maximumHeight + hintTextSize.y > maxHintHeight) {
+                    break;
+                }
                 maximumWidth = Mathf.Max(hintTextSize.x, maximumWidth);
                 maximumHeight += hintTextSize.y + HINT_HEIGHT_TEXT_PADDING;
+                ++hintsToDraw;
             }
             // maximumWidth += Style.SelectHintBumpOffsetAmount;
             
@@ -753,8 +740,8 @@ public class DevConsole : MonoBehaviour
              */
             GUI.Box(hintBackground, string.Empty, consoleSkin.customStyles[0]);
             Vector2 hintStartPos = hintBackground.position;
-            float stepHeight = maximumHeight / hintsToDisplay;
-            for (int i = 0; i < hintsToDisplay; i++) {
+            float stepHeight = maximumHeight / hintsToDraw;
+            for (int i = 0; i < hintsToDraw; i++) {
                 bool isSelected = i == selectedHint;
                 
                 float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount : 0;
@@ -767,7 +754,6 @@ public class DevConsole : MonoBehaviour
         else {
             selectedHint = -1;
         }
-        
         
         
         /*
@@ -783,6 +769,31 @@ public class DevConsole : MonoBehaviour
             --moveMarkerToEnd;
             TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
             text.MoveTextEnd();
+        }
+        
+        
+        
+        
+        
+        
+        /*
+         * drawdebug box
+         */
+        GUI.contentColor = Color.red;
+        GUI.backgroundColor = Style.BorderColor;
+        GUIContent debug = new () {
+            text = $"Selected Hint Index: {selectedHint}\n" +
+                   $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}\n" +
+                   $"CommandHistoryState: {CommandHistoryState}\n" + 
+                   $"HistoryCount: {HistoryCommands.Count}\n" +
+                   $"Hints to draw: {hintsToDraw}\n" + 
+                   $"Height of hints: {maximumHeight}" 
+        };
+
+
+        Vector2 size = consoleSkin.box.CalcSize(debug);
+        if (true) {
+            GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
         }
     }
 
