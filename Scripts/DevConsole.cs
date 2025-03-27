@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -199,8 +200,10 @@ public class DevConsole : MonoBehaviour
     
     [DevCommand]
     void SaveCommandHistory() {
+        if (HistoryCommands.Count == 0) return;
+        
         TextBuilder.Clear();
-        TextBuilder.EnsureCapacity(4096);
+        TextBuilder.EnsureCapacity(4096*2);
         
         foreach (HistoryCommand cmd in HistoryCommands) {
             TextBuilder.AppendLine((cmd.argumentValues.Length + 2).ToString());
@@ -214,17 +217,26 @@ public class DevConsole : MonoBehaviour
         File.WriteAllText(CommandHistoryPath, TextBuilder.ToString());
     }
     
+    [DevCommand]
+    void ClearCommandHistory(bool saveToFile) {
+        HistoryCommands.Clear();
+        if (saveToFile) SaveCommandHistory();
+    }
     
     [DevCommand]
     void LoadCommandHistory() {
-        HistoryCommands.Clear();
+        if (File.Exists(CommandHistoryPath) == false) return;
+        
+        HistoryCommands.Clear(); // only clear if it works?
         hasUnparsedHistoryCommands = false;
         string[] historyTextFile = File.ReadAllLines(CommandHistoryPath);
-        if (historyTextFile.Length < 3) return;
         
         int currentReadIndex = 0;
         while (currentReadIndex < historyTextFile.Length) {
-            int linesOfCommand = int.Parse(historyTextFile[currentReadIndex++]);
+            if (int.TryParse(historyTextFile[currentReadIndex++], out int linesOfCommand) == false) {
+                Debug.LogError("Error parsing command history! Try clearing history file to remove invalid values!");
+                break;
+            }
             int argumentCount = linesOfCommand - 2;
             HistoryCommand cmd = new () {
                 commandIndex = -1,
@@ -247,6 +259,8 @@ public class DevConsole : MonoBehaviour
                     break;
                 }
             }
+            ++currentReadIndex;
+
 
             int validArgsFound = 0;
             for (int i = 0; i < argumentCount; i++) {
@@ -268,7 +282,8 @@ public class DevConsole : MonoBehaviour
                 hasUnparsedHistoryCommands = true;
             }
             
-            currentReadIndex += linesOfCommand;
+            HistoryCommands.Insert(0,cmd);
+            currentReadIndex += argumentCount;
         }
     }
 
@@ -333,7 +348,7 @@ public class DevConsole : MonoBehaviour
         if (typeConverter.CanConvertFrom(typeof(string))) {
             object stringToValue = null;
             try {
-                stringToValue = typeConverter.ConvertFromString(inputCommand.inputContent.text);
+                stringToValue = typeConverter.ConvertFromString(argumentString);
             }
             catch {
                 // ignored
@@ -364,9 +379,9 @@ public class DevConsole : MonoBehaviour
             int argumentCount = cmd.argumentDisplayName.Length;
             for (int k = 0; k < argumentCount; k++) {
                 if (cmd.historyCommandState == 1) {
-                    object argumentValue = TryGetArgumentValue(ref cmd.argumentDisplayName[i], cmd.commandIndex, i);
+                    object argumentValue = TryGetArgumentValue(ref cmd.argumentDisplayName[k], cmd.commandIndex, k);
                     if (argumentValue != null) {
-                        cmd.argumentValues[i] = argumentValue;
+                        cmd.argumentValues[k] = argumentValue;
                         ++validArgsFound;
                     }
                 }
@@ -400,6 +415,7 @@ public class DevConsole : MonoBehaviour
         isActive = true;
         setFocus = 1;
         inputCommand.Clear();
+        CommandHistoryState = History.WAIT_FOR_INPUT;
         
 #if URP_ENABLED
         UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = false;
@@ -471,7 +487,7 @@ public class DevConsole : MonoBehaviour
         GUI.skin = consoleSkin;
         
         selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectHintBumpSpeed * Time.unscaledDeltaTime);
-        argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgumentTypeHelpSpeed * Time.unscaledDeltaTime);
+        argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgHelpBumpSpeed * Time.unscaledDeltaTime);
         bool windowHasFocus = GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID;
 
         /*
@@ -500,9 +516,14 @@ public class DevConsole : MonoBehaviour
             // Array.Sort(hintContent, 0, hintsToDisplay);
         }
 
-        if (inputCommand.commandIndex == -1 && inputCommand.HasText() == false && CommandHistoryState == History.HIDE) {
-            CommandHistoryState = History.WAIT_FOR_INPUT;
+        if (inputCommand.commandIndex == -1 && inputCommand.HasText() == false) {
+            if (CommandHistoryState == History.HIDE) 
+                CommandHistoryState = History.WAIT_FOR_INPUT;
         }
+        else {
+            CommandHistoryState = History.HIDE;
+        }
+        
 
         if (windowHasFocus) {
             if (selectedHint != -1) {
@@ -521,6 +542,7 @@ public class DevConsole : MonoBehaviour
                     inputCommand.inputContent.text = inputCommand.inputArgumentName[inputCommand.argumentCount].text;
                     moveMarkerToEnd = 2;
                     argumentHintBump = 0;
+                    selectedHint = 0;
                     inputEvent.Use();
                 }
                 else if (inputCommand.commandIndex != -1) {
@@ -610,9 +632,6 @@ public class DevConsole : MonoBehaviour
         GUI.Box(consoleInputBackground, string.Empty);
         
         
-        float dg_cmdRectPos = 0;
-        float[] db_argDrawPos = new float[inputCommand.argumentCount];
-        
         GUI.backgroundColor = Color.clear;
         float drawPosX = consoleInputBackground.x;
         if (inputCommand.commandIndex != -1) {
@@ -623,7 +642,6 @@ public class DevConsole : MonoBehaviour
             GUI.contentColor = Style.SelectedCommand;
             GUI.Label(commandRect, inputCommand.commandContent);
             drawPosX = commandRect.xMax - WIDTH_SPACING;
-            dg_cmdRectPos = commandRect.x;
             
             GUI.contentColor = Style.SelectedArgument;
             for (int i = 0; i < inputCommand.argumentCount; i++) {
@@ -633,22 +651,17 @@ public class DevConsole : MonoBehaviour
                 };
                 GUI.Label(argRect, inputCommand.inputArgumentName[i]);
                 drawPosX = argRect.xMax - WIDTH_SPACING;
-                db_argDrawPos[i] = argRect.x;
             }
         }
         
         
         GUI.contentColor = Style.InputTextDefault;
-        GUIContent inputFieldText = new (inputCommand.inputContent);
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
         Rect inputFieldRect = new (consoleInputBackground) {
             x = drawPosX,
             width = consoleInputBackground.width - (drawPosX - consoleInputBackground.x)
         };
-        string inputText = GUI.TextField(inputFieldRect, inputFieldText.text);
-        if (inputText != inputCommand.inputContent.text) {
-            CommandHistoryState = History.HIDE;
-        }
+        string inputText = GUI.TextField(inputFieldRect, inputCommand.inputContent.text);
         inputCommand.inputContent.text = inputText;
         
         
@@ -658,20 +671,32 @@ public class DevConsole : MonoBehaviour
         if (inputCommand.commandIndex != -1) {
             if (inputCommand.argumentCount < Commands[inputCommand.commandIndex].parameterCount) {
                 TextBuilder.Clear();
-                TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}><</color>");
-                TextBuilder.Append($"{Commands[inputCommand.commandIndex].parameters[inputCommand.argumentCount].ParameterType.Name}");
-                TextBuilder.Append($"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>></color>");
+                const string COLOR_END_TAG = "</color>";
+                string colorTag = $"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>";
+                int nameLenght = Commands[inputCommand.commandIndex].parameters[inputCommand.argumentCount].Name.Length;
+                TextBuilder.Append($"< {Commands[inputCommand.commandIndex].parameters[inputCommand.argumentCount].Name} | {Commands[inputCommand.commandIndex].parameters[inputCommand.argumentCount].ParameterType.Name} >");
                 
-                
-                GUIContent argumentHint = new ($"< {Commands[inputCommand.commandIndex].parameters[inputCommand.argumentCount].ParameterType.Name} >");
+                GUIContent argumentHint = new (TextBuilder.ToString());
                 Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
                 Rect argumentHintRect = new (inputFieldRect) {
                     x = inputFieldRect.x + consoleSkin.textField.CalcSize(inputCommand.inputContent).x,
                     width = argumentHintSize.x,
                 };
+                argumentHintRect.position += new Vector2(Style.ArgHelpWidthPadding, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgHelpBumpOffsetAmount);
+
+                // Middle
+                TextBuilder.Insert(nameLenght + 4, COLOR_END_TAG);
+                TextBuilder.Insert(nameLenght + 3, colorTag);
                 
-                argumentHintRect.position += new Vector2(Style.ArgumentTypeHelpOffset, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgumentTypeHelpOffsetAmount);
+                // Start
+                TextBuilder.Insert(1, COLOR_END_TAG);
+                TextBuilder.Insert(0, colorTag);
                 
+                // End
+                TextBuilder.Insert(TextBuilder.Length-1, colorTag);
+                TextBuilder.Append(COLOR_END_TAG);
+
+
                 GUI.contentColor = Style.InputArgumentType;
                 argumentHint.text = TextBuilder.ToString();
                 GUI.Label(argumentHintRect, argumentHint);
@@ -681,18 +706,18 @@ public class DevConsole : MonoBehaviour
         
         
         /*
-         * debug box
+         * drawdebug box
          */
-        GUI.contentColor = Color.yellow;
+        GUI.contentColor = Color.red;
+        GUI.backgroundColor = Style.BorderColor;
         GUIContent debug = new () {
             text = $"Selected Hint Index: {selectedHint}\n" +
                    $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}\n" +
-                   $"Command Draw Pos: {dg_cmdRectPos}\n"
+                   $"CommandHistoryState: {CommandHistoryState}\n" + 
+                   $"HistoryCount: {HistoryCommands.Count}"
         };
 
-        for (int i = 0; i < inputCommand.argumentCount; i++) {
-            debug.text += $"Arg {i} Draw Pos: {db_argDrawPos[i]}\n";
-        }
+
         Vector2 size = consoleSkin.box.CalcSize(debug);
         if (true) {
             GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
@@ -702,7 +727,7 @@ public class DevConsole : MonoBehaviour
         
         
         /*
-         * Draw Hint Box
+         * DrawHintBox
          */
         if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
             float maximumWidth = 0;
@@ -713,14 +738,14 @@ public class DevConsole : MonoBehaviour
                 maximumWidth = Mathf.Max(hintTextSize.x, maximumWidth);
                 maximumHeight += hintTextSize.y + HINT_HEIGHT_TEXT_PADDING;
             }
-            maximumWidth += Style.SelectHintBumpOffsetAmount;
+            // maximumWidth += Style.SelectHintBumpOffsetAmount;
             
             
             GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
             Rect hintBackground = new (inputFieldRect) {
                 width = maximumWidth,
-                height = maximumHeight,
-                y = consoleInputDrawPos.y - maximumHeight + 2,
+                height = maximumHeight + Style.HintBoxHeightPadding,
+                y = consoleInputDrawPos.y - Style.HintBoxHeightPadding - maximumHeight + 2,
             };
             
             /*
