@@ -3,7 +3,7 @@
  */
 
 //#define URP_ENABLED
-#define ENABLE_LOGS
+#define ENABLE_DEBUG
 
 
 using System;
@@ -44,12 +44,12 @@ public class DevConsole : MonoBehaviour
     }
     
 
-    [Conditional("ENABLE_LOGS")]
+    [Conditional("ENABLE_DEBUG")]
     void Log(string message, Object context = null) {
         Debug.Log(message, context);
     }
     
-    [Conditional("ENABLE_LOGS")]
+    [Conditional("ENABLE_DEBUG")]
     void LogError(string message, Object context = null) {
         Debug.LogError(message, context);
     }
@@ -225,7 +225,7 @@ public class DevConsole : MonoBehaviour
         foreach (HistoryCommand cmd in HistoryCommands) {
             TextBuilder.AppendLine((cmd.argumentValues.Length + 2).ToString());
             TextBuilder.AppendLine(cmd.displayString);
-            TextBuilder.AppendLine(Commands[cmd.commandIndex].GetDisplayName());
+            TextBuilder.AppendLine(cmd.commandDisplayName);
             foreach (string argName in cmd.argumentDisplayName) {
                 TextBuilder.AppendLine(argName);
             }
@@ -413,6 +413,8 @@ public class DevConsole : MonoBehaviour
                     hasUnparsedHistoryCommands = true;
                 }
             }
+            
+            HistoryCommands[i] = cmd;
         }
     }
     
@@ -789,12 +791,13 @@ public class DevConsole : MonoBehaviour
             TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
             text.MoveTextEnd();
         }
-        
-        
-        
-        
-        
-        
+
+
+
+
+
+#if ENABLE_DEBUG
+
         /*
          * drawdebug box
          */
@@ -802,18 +805,38 @@ public class DevConsole : MonoBehaviour
         GUI.backgroundColor = Style.BorderColor;
         GUIContent debug = new () {
             text = $"Selected Hint Index: {selectedHint}\n" +
-                   $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}\n" +
-                   $"CommandHistoryState: {CommandHistoryState}\n" + 
+                   $"Command Index: {inputCommand.commandIndex}\n" +
+                   // $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}\n" +
+                   // $"CommandHistoryState: {CommandHistoryState}\n" + 
                    $"HistoryCount: {HistoryCommands.Count}\n" +
-                   $"Hints to draw: {hintsToDraw}\n" + 
-                   $"Height of hints: {maximumHeight}" 
+                   // $"Hints to draw: {hintsToDraw}\n" + 
+                   // $"Height of hints: {maximumHeight}\n" +
+                   // $"History Index: "
+                   
+                   // $"\n" +
+                   "",
         };
+
+        if (CommandHistoryState == History.SHOW && selectedHint != -1) {
+            HistoryCommand cmd = HistoryCommands[selectedHint];
+            string text = $"-- History command #{selectedHint} --\n";
+            text += $"commandIndex: {cmd.commandIndex}\n";
+            text += $"historyState: {cmd.historyCommandState}\n";
+            text += $"displayString: {cmd.displayString}\n";
+            text += $"displayName: {cmd.commandDisplayName}\n";
+            foreach (var str in cmd.argumentDisplayName) {
+                text += $"arg: {str}\n";
+            }
+
+            debug.text += text;
+        }
 
 
         Vector2 size = consoleSkin.box.CalcSize(debug);
         if (true) {
             GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
         }
+#endif
     }
 
 
@@ -1037,7 +1060,7 @@ public class DevConsole : MonoBehaviour
             if (CommandHistoryState == History.SHOW) {
                 HistoryCommand historyCommand = HistoryCommands[HintIndex[indexOfHint]];
                 commandIndex = historyCommand.commandIndex;
-                commandContent.text = Commands[commandIndex].GetDisplayName();
+                commandContent.text = historyCommand.commandDisplayName;
                 
                 argumentCount = historyCommand.argumentValues.Length;
                 for (int i = 0; i < argumentCount; i++) {
@@ -1114,6 +1137,7 @@ public class DevConsole : MonoBehaviour
                 Commands[commandIndex].method.Invoke(target[i], argumentValues);
             }
 
+            historyCommand.historyCommandState = 2;
             historyCommand.commandIndex = commandIndex;
             historyCommand.argumentValues = inputArgumentValue[..argumentCount];
             historyCommand.argumentDisplayName = new string[argumentCount];
