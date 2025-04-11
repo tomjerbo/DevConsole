@@ -2,8 +2,8 @@
  * Enable this for projects with URP
  */
 
-//#define URP_ENABLED
-#define ENABLE_DEBUG
+// #define URP_ENABLED
+#define ENABLE_LOGS
 
 
 using System;
@@ -44,12 +44,12 @@ public class DevConsole : MonoBehaviour
     }
     
 
-    [Conditional("ENABLE_DEBUG")]
+    [Conditional("ENABLE_LOGS")]
     void Log(string message, Object context = null) {
         Debug.Log(message, context);
     }
     
-    [Conditional("ENABLE_DEBUG")]
+    [Conditional("ENABLE_LOGS")]
     void LogError(string message, Object context = null) {
         Debug.LogError(message, context);
     }
@@ -271,7 +271,7 @@ public class DevConsole : MonoBehaviour
             for (int i = 0; i < totalCommandCount; i++) {
                 if (string.Equals(Commands[i].GetDisplayName(), historyTextFile[currentReadIndex], StringComparison.OrdinalIgnoreCase)) {
                     cmd.commandIndex = i;
-                    cmd.historyCommandState = 1;
+                    cmd.historyCommandState = argumentCount > 0 ? 1 : 2;
                     cmd.commandDisplayName = Commands[i].GetDisplayName();
                     break;
                 }
@@ -280,10 +280,9 @@ public class DevConsole : MonoBehaviour
 
 
             int validArgsFound = 0;
-            for (int i = 0; i < argumentCount; i++) {
-                cmd.argumentDisplayName[i] = historyTextFile[currentReadIndex + i];
-                
-                if (cmd.historyCommandState == 1) {
+            if (cmd.historyCommandState == 1) {
+                for (int i = 0; i < argumentCount; i++) {
+                    cmd.argumentDisplayName[i] = historyTextFile[currentReadIndex + i];
                     object argumentValue = TryGetArgumentValue(ref historyTextFile[currentReadIndex + i], cmd.commandIndex, i);
                     if (argumentValue != null) {
                         cmd.argumentValues[i] = argumentValue;
@@ -791,13 +790,12 @@ public class DevConsole : MonoBehaviour
             TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
             text.MoveTextEnd();
         }
-
-
-
-
-
-#if ENABLE_DEBUG
-
+        
+        
+        
+        
+        
+        
         /*
          * drawdebug box
          */
@@ -836,7 +834,6 @@ public class DevConsole : MonoBehaviour
         if (true) {
             GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
         }
-#endif
     }
 
 
