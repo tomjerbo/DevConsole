@@ -3,18 +3,19 @@
  */
 
 //#define URP_ENABLED
+#define ENABLE_LOGS
 
 
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
-
 
 /*
  * ----------- TODO LIST ----------------
@@ -39,7 +40,21 @@ public class DevConsole : MonoBehaviour
         GameObject consoleContainer = new ("- Dev Console -");
         consoleContainer.AddComponent<DevConsole>();
         DontDestroyOnLoad(consoleContainer);
+        IsActive = false;
     }
+    
+
+    [Conditional("ENABLE_LOGS")]
+    void Log(string message, Object context = null) {
+        Debug.Log(message, context);
+    }
+    
+    [Conditional("ENABLE_LOGS")]
+    void LogError(string message, Object context = null) {
+        Debug.LogError(message, context);
+    }
+    
+    
     
     
     /*
@@ -92,10 +107,10 @@ public class DevConsole : MonoBehaviour
      * make char[] and just slice into it?
      * use helper methods to manipulate char[] without adding memory
      */
+    public static bool IsActive { get; private set; }
     static readonly StringBuilder TextBuilder = new (256);
     static readonly List<HistoryCommand> HistoryCommands = new (32);
     readonly InputCommand inputCommand = new ();
-    bool isActive;
     int moveMarkerToEnd;
     int selectedHint;
     int setFocus;
@@ -124,9 +139,9 @@ public class DevConsole : MonoBehaviour
     
     [DevCommand]
     void LogCache() {
-        Debug.LogError($"- Cached Assets({Cache.AssetNames.Length}) -");
+        LogError($"- Cached Assets({Cache.AssetNames.Length}) -");
         for (int i = 0; i < Cache.AssetNames.Length; i++) {
-            Debug.LogError($"{Cache.AssetNames[i]} -> {Cache.AssetReferences[i].GetInstanceID()}");
+            LogError($"{Cache.AssetNames[i]} -> {Cache.AssetReferences[i].GetInstanceID()}");
         }
     }
     
@@ -196,6 +211,7 @@ public class DevConsole : MonoBehaviour
 
     void OnDestroy() {
         SaveCommandHistory();
+        IsActive = false;
     }
 
     
@@ -235,7 +251,7 @@ public class DevConsole : MonoBehaviour
         int currentReadIndex = 0;
         while (currentReadIndex < historyTextFile.Length) {
             if (int.TryParse(historyTextFile[currentReadIndex++], out int linesOfCommand) == false) {
-                Debug.LogError("Error parsing command history! Try clearing history file to remove invalid values!");
+                LogError("Error parsing command history! Try clearing history file to remove invalid values!");
                 break;
             }
             int argumentCount = linesOfCommand - 2;
@@ -369,7 +385,7 @@ public class DevConsole : MonoBehaviour
             if (cmd.historyCommandState == 0) {
                 for (int k = 0; k < totalCommandCount; k++) {
                     if (string.Equals(cmd.commandDisplayName, Commands[k].GetDisplayName(), StringComparison.OrdinalIgnoreCase)) {
-                        cmd.commandIndex = i;
+                        cmd.commandIndex = k;
                         cmd.historyCommandState = 1;
                         cmd.commandDisplayName = Commands[k].GetDisplayName();
                         break;
@@ -388,12 +404,14 @@ public class DevConsole : MonoBehaviour
                 }
             }
             
-            if (validArgsFound == argumentCount) {
-                cmd.historyCommandState = 2;
-                Debug.Log($"Successfully parsed command -> {cmd.displayString}");
-            }
-            else {
-                hasUnparsedHistoryCommands = true;
+            if (cmd.historyCommandState < 2) {
+                if (validArgsFound == argumentCount) {
+                   cmd.historyCommandState = 2;
+                   Log($"Successfully parsed command -> {cmd.displayString}");
+                }
+                else {
+                    hasUnparsedHistoryCommands = true;
+                }
             }
         }
     }
@@ -413,7 +431,7 @@ public class DevConsole : MonoBehaviour
     
     
     void OpenConsole() {
-        isActive = true;
+        IsActive = true;
         setFocus = 1;
         inputCommand.Clear();
         CommandHistoryState = History.WAIT_FOR_INPUT;
@@ -445,7 +463,7 @@ public class DevConsole : MonoBehaviour
 
     
     void CloseConsole() {
-        isActive = false;
+        IsActive = false;
         selectedHint = -1;
         GUI.FocusControl(null);
         
@@ -466,7 +484,7 @@ public class DevConsole : MonoBehaviour
     
     void OnGUI() {
         Event inputEvent = Event.current;
-        if (isActive == false) {
+        if (IsActive == false) {
             if (inputEvent.OpenConsole()) OpenConsole();
             return;
         }
@@ -1142,9 +1160,9 @@ public class DevConsole : MonoBehaviour
     }
 
     struct HistoryCommand {
-        internal string displayString;
-        internal int commandIndex;
         internal int historyCommandState; // 0 not parsed, 1 parsed command, 2 parsed command and args
+        internal int commandIndex;
+        internal string displayString;
         internal string commandDisplayName;
         internal object[] argumentValues;
         internal string[] argumentDisplayName;
