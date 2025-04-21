@@ -433,7 +433,7 @@ public class DevConsole : MonoBehaviour
     
     void OpenConsole() {
         IsActive = true;
-        setFocus = 1;
+        setFocus = 2;
         inputCommand.Clear();
         CommandHistoryState = History.WAIT_FOR_INPUT;
         
@@ -548,10 +548,15 @@ public class DevConsole : MonoBehaviour
         if (windowHasFocus) {
             if (selectedHint != -1) {
                 if (inputEvent.InsertHint()) {
-                    inputCommand.UseHint(selectedHint);
-                    CommandHistoryState = History.HIDE;
-                    moveMarkerToEnd = 2;
-                    selectedHint = -1;
+                    if (CommandHistoryState == History.SHOW && HistoryCommands[HintIndex[selectedHint]].historyCommandState != 2) {
+                        selectionBump = 0;
+                    }
+                    else {
+                        inputCommand.UseHint(selectedHint);
+                        CommandHistoryState = History.HIDE;
+                        moveMarkerToEnd = 2;
+                        selectedHint = -1;    
+                    }
                 }
             }
 
@@ -755,9 +760,7 @@ public class DevConsole : MonoBehaviour
                 y = consoleInputDrawPos.y - Style.HintBoxHeightPadding - maximumHeight + 2,
             };
             
-            /*
-             * TODO make unparsed history commands not selectable and show up as grey'd out
-             */
+            
             GUI.Box(hintBackground, string.Empty, consoleSkin.customStyles[0]);
             Vector2 hintStartPos = hintBackground.position;
             float stepHeight = maximumHeight / hintsToDraw;
@@ -768,7 +771,17 @@ public class DevConsole : MonoBehaviour
                 Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
                 
                 GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
+
+                if (CommandHistoryState == History.SHOW) {
+                    if (HistoryCommands[i].historyCommandState != 2) {
+                        GUI.enabled = false;
+                    }
+                }
                 GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), HintContent[i]);
+                
+                if (GUI.enabled == false) {
+                    GUI.enabled = true;
+                }
             }
         }
         else {
@@ -783,6 +796,7 @@ public class DevConsole : MonoBehaviour
         if (setFocus > 0) {
             --setFocus;
             GUI.FocusControl(CONSOLE_INPUT_FIELD_ID);
+            inputCommand.Clear();
         }
         
         if (moveMarkerToEnd > 0) {
@@ -1127,6 +1141,7 @@ public class DevConsole : MonoBehaviour
                 }
             }
 
+            
             for (int i = 0; i < target.Count; i++) {
                 if (commandIndex > StaticCommandCount && target[i] == null) {
                     continue;
