@@ -6,7 +6,7 @@
   "unity": "2022.0",
   "category": "tool",
   "dependencies": {
-    "com.Jerbo.Inspector": "0.1.0"
+    "com.jerbo.inspector": "0.1.0"
   },
   "author": {
     "name": "Tom Jerbo",
