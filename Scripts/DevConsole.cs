@@ -3,7 +3,7 @@
  */
 
 // #define URP_ENABLED
-#define ENABLE_LOGS
+#define CONSOLE_DEBUG
 
 
 using System;
@@ -14,6 +14,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Events;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
@@ -43,19 +44,13 @@ public class DevConsole : MonoBehaviour
         IsActive = false;
     }
     
-    //
-    // [Conditional("ENABLE_LOGS")]
-    // void Log(string message, Object context = null) {
-    //     Debug.Log(message, context);
-    // }
-    //
     
-    [Conditional("ENABLE_LOGS")]
+    [Conditional("CONSOLE_DEBUG")]
     void Log(object message, Object context = null) {
         Debug.Log(message.ToString(), context);
     }
 
-    [Conditional("ENABLE_LOGS")]
+    [Conditional("CONSOLE_DEBUG")]
     void LogError(string message, Object context = null) {
         Debug.LogError(message, context);
     }
@@ -104,6 +99,7 @@ public class DevConsole : MonoBehaviour
     static History CommandHistoryState;
     static int StaticCommandCount;
     int hintsToDisplay;
+    int hint_display_index_start;
     int totalCommandCount;
 
     
@@ -162,9 +158,6 @@ public class DevConsole : MonoBehaviour
         for (int i = 0; i < HintContent.Length; i++) {
             HintContent[i] = new GUIContent();
         }
-/*
- * TODO move this somewhere else or destroy inputcommand object
- */
         for (int i = 0; i < inputCommand.inputArgumentName.Length; i++) {
             inputCommand.inputArgumentName[i] = new GUIContent();
         }
@@ -189,7 +182,6 @@ public class DevConsole : MonoBehaviour
                 
                 Commands[totalCommandCount++].AssignField(devCommand, fieldInfo, null);
             }
-           
         }
         
         StaticCommandCount = totalCommandCount;
@@ -197,7 +189,7 @@ public class DevConsole : MonoBehaviour
     
     void LoadInstanceCommands() {
         totalCommandCount = StaticCommandCount;
-        MonoBehaviour[] monoBehavioursInScene = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        MonoBehaviour[] monoBehavioursInScene = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
         foreach (MonoBehaviour scriptBase in monoBehavioursInScene) {
             
@@ -400,6 +392,7 @@ public class DevConsole : MonoBehaviour
 
             return null;
         }
+        
 
         
         /*
@@ -418,7 +411,47 @@ public class DevConsole : MonoBehaviour
 
             return stringToValue;
         }
+        
+        
+        /*
+         * Vectors
+         */
+        
+        bool isVec2 = argumentType == typeof(Vector2);
+        bool isVec3 = argumentType == typeof(Vector3);
+        bool isVec4 = argumentType == typeof(Vector4);
+        if (isVec2 || isVec3 || isVec4) {
+            string[] numbers = argumentString.Split(SPACE);
+            int count = numbers.Length;
+            if (count < 2 || count > 4)
+                return null;
+            
+            TypeConverter floatConverter = TypeDescriptor.GetConverter(typeof(float));
+            object[] values = new object[count];
+            for (int i = 0; i < count; i++) {
+                try {
+                    values[i] = floatConverter.ConvertFromString(numbers[i]);
+                }
+                catch {
+                    return null;
+                }
+            }
 
+            
+            if (isVec2 && count == 2) {
+                return new Vector2((float)values[0], (float)values[1]);
+            }
+            
+            if (isVec3 && count == 3) {
+                return new Vector3((float)values[0], (float)values[1],  (float)values[2]);
+            }
+            
+            if (isVec4 && count == 4) {
+                return new Vector4((float)values[0], (float)values[1], (float)values[2], (float)values[3]);
+            }
+        }
+        
+        
         return null;
     }
 
@@ -778,7 +811,7 @@ public class DevConsole : MonoBehaviour
          * DrawHintBox
          */
         int hintsToDraw = 0;
-            float maximumHeight = 0;
+        float maximumHeight = 0;
         if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
             float maximumWidth = 0;
 
@@ -809,8 +842,16 @@ public class DevConsole : MonoBehaviour
             GUI.Box(hintBackground, string.Empty, consoleSkin.customStyles[0]);
             Vector2 hintStartPos = hintBackground.position;
             float stepHeight = maximumHeight / hintsToDraw;
+            
+            if (selectedHint < hint_display_index_start) {
+                hint_display_index_start = selectedHint;
+            } else if (selectedHint >= hint_display_index_start + hintsToDraw) {
+                hint_display_index_start = selectedHint - hintsToDraw + 1;
+            }
+            hint_display_index_start = Mathf.Clamp(hint_display_index_start, 0, Mathf.Max(hintsToDisplay - hintsToDraw, 0));
+            
             for (int i = 0; i < hintsToDraw; i++) {
-                bool isSelected = i == selectedHint;
+                bool isSelected = (hint_display_index_start + i) == selectedHint;
                 
                 float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount : 0;
                 Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
@@ -818,11 +859,11 @@ public class DevConsole : MonoBehaviour
                 GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
 
                 if (CommandHistoryState == History.SHOW) {
-                    if (HistoryCommands[i].historyCommandState != 2) {
+                    if (HistoryCommands[hint_display_index_start + i].historyCommandState != 2) {
                         GUI.enabled = false;
                     }
                 }
-                GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), HintContent[i]);
+                GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), HintContent[hint_display_index_start + i]);
                 
                 if (GUI.enabled == false) {
                     GUI.enabled = true;
@@ -855,7 +896,7 @@ public class DevConsole : MonoBehaviour
         
         
         
-#if DEBUG
+#if CONSOLE_DEBUG
         /*
          * drawdebug box
          */
@@ -1079,13 +1120,61 @@ public class DevConsole : MonoBehaviour
         }
         
         
+        
         /*
-         * prob wanna display what command and name of argument it's related too as well, but also not inside the hint box
+         * Vectors
          */
-        // TextBuilder.Clear();
-        // TextBuilder.Append($"Parameters -> '{argumentType}'({argumentType.Name}) is not supported!");
-        // TextBuilder.Append(SPACE);
-        // inputHints[hintsFound++].SetHint(TextBuilder);
+        bool isVec2 = argumentType == typeof(Vector2);
+        bool isVec3 = argumentType == typeof(Vector3);
+        bool isVec4 = argumentType == typeof(Vector4);
+        if (isVec2 || isVec3 || isVec4) {
+            string[] numbers = inputCommand.inputContent.text.Split(SPACE);
+            int count = numbers.Length;
+            if (count < 2 || count > 4)
+                return hintsFound;
+            
+            TypeConverter floatConverter = TypeDescriptor.GetConverter(typeof(float));
+            object[] values = new object[count];
+            for (int i = 0; i < count; i++) {
+                try {
+                    values[i] = floatConverter.ConvertFromString(numbers[i]);
+                }
+                catch {
+                    return hintsFound;
+                }
+            }
+
+            
+            if (isVec2 && count == 2) {
+                Vector2 v = new ((float)values[0], (float)values[1]);
+                HintContent[hintsFound].text = inputCommand.inputContent.text;
+                HintValue[hintsFound] = v;
+                
+                hintsFound++;
+                return hintsFound;
+            }
+            
+            if (isVec3 && count == 3) {
+                Vector3 v = new ((float)values[0], (float)values[1],  (float)values[2]);
+                HintContent[hintsFound].text = inputCommand.inputContent.text;
+                HintValue[hintsFound] = v;
+                
+                hintsFound++;
+                return hintsFound;
+            }
+            
+            if (isVec4 && count == 4) {
+                Vector4 v = new ((float)values[0], (float)values[1], (float)values[2], (float)values[3]);
+                HintContent[hintsFound].text = inputCommand.inputContent.text;
+                HintValue[hintsFound] = v;
+                
+                hintsFound++;
+                return hintsFound;
+            }
+        }
+        
+        
+        
         return hintsFound;
     }
 
@@ -1142,8 +1231,24 @@ public class DevConsole : MonoBehaviour
             /*
              * When applying argument hint
              */
-
             object argumentValue = HintValue[indexOfHint];
+            
+            
+            /*
+             * Vectors
+             */
+            
+            if (argumentValue is Vector2 || argumentValue is Vector3 || argumentValue is Vector4) {
+                inputArgumentName[argumentCount].text = HintContent[indexOfHint].text;
+                inputArgumentValue[argumentCount] = argumentValue;
+                argumentCount++;
+                return;
+            }
+            
+            /*
+             * ScriptableObjects and everything else
+             */
+            
             if (SO_TYPE.IsAssignableFrom(argumentValue.GetType())) {
                 inputArgumentName[argumentCount].text = HintContent[indexOfHint].text;
             }
@@ -1194,7 +1299,27 @@ public class DevConsole : MonoBehaviour
                     Commands[commandIndex].method.Invoke(Commands[commandIndex].targets[i], argumentValues);
                 }
                 else {
-                    Commands[commandIndex].field.SetValue(Commands[commandIndex].targets[i], argumentValues[0]);
+                    /*
+                     * Actions will be null if no one is subscribed to them, unity events will still be valid
+                     * Not doing null check on them since I'm not sure what I want the behaviour to be if it is
+                     * Logging it might be really annoying..
+                     */
+                    if (Commands[commandIndex].field.FieldType == typeof(UnityEvent)) {
+                        UnityEvent unityEvent = Commands[commandIndex].field.GetValue(Commands[commandIndex].targets[i]) as UnityEvent;
+                        unityEvent?.Invoke();
+                    }
+                    else if (Commands[commandIndex].field.FieldType == typeof(Action)) {
+                        Action action = Commands[commandIndex].field.GetValue(Commands[commandIndex].targets[i]) as Action;
+                        if (action == null) {
+                            Debug.LogError($"Action is null -> Could be caused by {Commands[commandIndex].field.Name} having no subscribers!");
+                        }
+                        else {
+                            action.Invoke();
+                        }
+                    }
+                    else {
+                        Commands[commandIndex].field.SetValue(Commands[commandIndex].targets[i], argumentValues[0]);
+                    }
                 }
             }
 
@@ -1273,13 +1398,18 @@ public class DevConsole : MonoBehaviour
             }
             
             displayName = string.IsNullOrEmpty(devCommand.displayName) ? field.Name : devCommand.displayName;
+
+
             
             parameterCount = 1;
             parameterTypes = new Type[parameterCount];
             parameterNames = new string[parameterCount];
             parameterHasDefault = new bool[parameterCount];
             defaultParamValue = new object[parameterCount];
-
+            
+            if (field.FieldType == typeof(UnityEvent) || field.FieldType == typeof(Action)) {
+                parameterCount = 0;
+            }
 
             TextBuilder.Clear();
             TextBuilder.Append($"{displayName} ");
@@ -1289,6 +1419,8 @@ public class DevConsole : MonoBehaviour
             parameterHasDefault[0] = false;
             defaultParamValue[0] = null;
             hintText = TextBuilder.ToString();
+            
+
             
             if (targets == null) targets = new List<Object>();
             else targets.Clear();
