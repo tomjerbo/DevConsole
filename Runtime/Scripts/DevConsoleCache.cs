@@ -1,4 +1,3 @@
-using Jerbo.Inspector;
 using UnityEngine;
 
 namespace Jerbo.DevConsole { 
@@ -10,7 +9,6 @@ public class DevConsoleCache : ScriptableObject
     [HideInInspector, SerializeField] public string[] AssetNames;
     
 #if UNITY_EDITOR
-    [SerializeField, ReadOnly] int AssetsCached;
 
     /*
      * Different caching spots
@@ -44,8 +42,7 @@ public class DevConsoleCache : ScriptableObject
             cache.AssetReferences[i] = UnityEditor.AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
             cache.AssetNames[i] = cache.AssetReferences[i].name;
         }
-
-        cache.AssetsCached = cache.AssetReferences.Length;
+        
         Debug.Log($"DevConsole Cached -> {cache.AssetReferences.Length} ScriptableObjects");
     }
     
