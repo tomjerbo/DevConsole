@@ -43,16 +43,23 @@ public class DevConsole : MonoBehaviour
         IsActive = false;
     }
     
-
-    [Conditional("ENABLE_LOGS")]
-    void Log(string message, Object context = null) {
-        Debug.Log(message, context);
-    }
+    //
+    // [Conditional("ENABLE_LOGS")]
+    // void Log(string message, Object context = null) {
+    //     Debug.Log(message, context);
+    // }
+    //
     
+    [Conditional("ENABLE_LOGS")]
+    void Log(object message, Object context = null) {
+        Debug.Log(message.ToString(), context);
+    }
+
     [Conditional("ENABLE_LOGS")]
     void LogError(string message, Object context = null) {
         Debug.LogError(message, context);
     }
+    
     
     
     
@@ -69,6 +76,7 @@ public class DevConsole : MonoBehaviour
     
     const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
+    const int MAX_COMMANDS = 256;
     const int MAX_HINTS = 32;
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
@@ -87,7 +95,7 @@ public class DevConsole : MonoBehaviour
     static DevConsoleCache Cache;
     static DevConsoleStyle Style;
     static readonly string CommandHistoryPath = Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
-    static readonly CommandData[] Commands = new CommandData[256];
+    static readonly CommandData[] Commands = new CommandData[MAX_COMMANDS];
     static readonly int[] HintIndex = new int[MAX_HINTS];
     static readonly object[] HintValue = new object[MAX_HINTS];
     static readonly GUIContent[] HintContent = new GUIContent[MAX_HINTS];
@@ -170,10 +178,20 @@ public class DevConsole : MonoBehaviour
                 DevCommand devCommand = methodInfo.GetCustomAttribute<DevCommand>();
                 if (devCommand == null) continue;
                 
-                Commands[totalCommandCount++].AssignCommand(devCommand, methodInfo, null);
+                Commands[totalCommandCount++].AssignMethod(devCommand, methodInfo, null);
             }
+            
+            
+            FieldInfo[] fieldsInType = loadedType.GetFields(STATIC_BINDING_FLAGS);
+            foreach (FieldInfo fieldInfo in fieldsInType) {
+                DevCommand devCommand = fieldInfo.GetCustomAttribute<DevCommand>();
+                if (devCommand == null) continue;
+                
+                Commands[totalCommandCount++].AssignField(devCommand, fieldInfo, null);
+            }
+           
         }
-
+        
         StaticCommandCount = totalCommandCount;
     }
     
@@ -182,26 +200,55 @@ public class DevConsole : MonoBehaviour
         MonoBehaviour[] monoBehavioursInScene = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
 
         foreach (MonoBehaviour scriptBase in monoBehavioursInScene) {
+            
             MethodInfo[] methodsInType = scriptBase.GetType().GetMethods(INSTANCED_BINDING_FLAGS);
             foreach (MethodInfo methodInfo in methodsInType) {
                 DevCommand devCommand = methodInfo.GetCustomAttribute<DevCommand>();
                 if (devCommand == null) continue;
                 
                 if (HasFoundInstancedCommand(methodInfo, out int index)) {
-                    Commands[index].AddTarget(scriptBase);
+                    Commands[index].targets.Add(scriptBase);
                 }
                 else {
-                    Commands[totalCommandCount++].AssignCommand(devCommand, methodInfo, scriptBase);
+                    Commands[totalCommandCount++].AssignMethod(devCommand, methodInfo, scriptBase);
+                }
+            }
+            
+            FieldInfo[] fieldsInType = scriptBase.GetType().GetFields(INSTANCED_BINDING_FLAGS);
+            foreach (FieldInfo fieldInfo in fieldsInType) {
+                DevCommand devCommand = fieldInfo.GetCustomAttribute<DevCommand>();
+                if (devCommand == null) continue;
+                
+                if (HasFoundInstancedCommand(fieldInfo, out int index)) {
+                    Commands[index].targets.Add(scriptBase);
+                }
+                else {
+                    Commands[totalCommandCount++].AssignField(devCommand, fieldInfo, scriptBase);
                 }
             }
         }
     }
     
-    bool HasFoundInstancedCommand(MethodInfo methodInfo, out int index) {
+    bool HasFoundInstancedCommand(object commandTarget, out int index) {
+        bool isTargetMethod = commandTarget is MethodInfo;
+        MethodInfo methodInfo = commandTarget as MethodInfo;
+        FieldInfo fieldInfo = commandTarget as FieldInfo;
+        
         for (int i = StaticCommandCount; i < totalCommandCount; i++) {
-            if (Commands[i].method == methodInfo) {
-                index = i;
-                return true;
+            
+            if (isTargetMethod) {
+                if (Commands[i].commandType == CommandData.CommandType.METHOD) {
+                    if (Commands[i].method == methodInfo) {
+                        index = i;
+                        return true;
+                    }
+                }
+            }
+            else {
+                if (Commands[i].field == fieldInfo) {
+                    index = i;
+                    return true;
+                }
             }
         }
 
@@ -262,22 +309,21 @@ public class DevConsole : MonoBehaviour
                 displayString = historyTextFile[currentReadIndex++],
             };
             
-            
             /*
              * try find command
              */
 
 
             for (int i = 0; i < totalCommandCount; i++) {
-                if (string.Equals(Commands[i].GetDisplayName(), historyTextFile[currentReadIndex], StringComparison.OrdinalIgnoreCase)) {
+                if (string.Equals(Commands[i].displayName, historyTextFile[currentReadIndex], StringComparison.OrdinalIgnoreCase)) {
                     cmd.commandIndex = i;
                     cmd.historyCommandState = argumentCount > 0 ? 1 : 2;
-                    cmd.commandDisplayName = Commands[i].GetDisplayName();
+                    cmd.commandDisplayName = Commands[i].displayName;
                     break;
                 }
             }
             ++currentReadIndex;
-
+            
 
             int validArgsFound = 0;
             if (cmd.historyCommandState == 1) {
@@ -298,7 +344,7 @@ public class DevConsole : MonoBehaviour
                 hasUnparsedHistoryCommands = true;
             }
             
-            HistoryCommands.Insert(0,cmd);
+            HistoryCommands.Add(cmd);
             currentReadIndex += argumentCount;
         }
     }
@@ -308,7 +354,7 @@ public class DevConsole : MonoBehaviour
         /*
          * Bool
          */
-        Type argumentType = Commands[commandIndex].parameters[argumentIndex].ParameterType;
+        Type argumentType = Commands[commandIndex].parameterTypes[argumentIndex];
 
         if (argumentType == typeof(bool)) {
             if (string.Equals(argumentString, bool.TrueString, StringComparison.OrdinalIgnoreCase)) {
@@ -383,10 +429,10 @@ public class DevConsole : MonoBehaviour
             HistoryCommand cmd = HistoryCommands[i];
             if (cmd.historyCommandState == 0) {
                 for (int k = 0; k < totalCommandCount; k++) {
-                    if (string.Equals(cmd.commandDisplayName, Commands[k].GetDisplayName(), StringComparison.OrdinalIgnoreCase)) {
+                    if (string.Equals(cmd.commandDisplayName, Commands[k].displayName, StringComparison.OrdinalIgnoreCase)) {
                         cmd.commandIndex = k;
                         cmd.historyCommandState = 1;
-                        cmd.commandDisplayName = Commands[k].GetDisplayName();
+                        cmd.commandDisplayName = Commands[k].displayName;
                         break;
                     }
                 }
@@ -523,10 +569,7 @@ public class DevConsole : MonoBehaviour
          * Input -> Execute navigation
          */
 
-
-        /*
-         * make it possible to show command history as hints, add new hint type
-         */
+        
         hintsToDisplay = ParseHints();
         if (hintsToDisplay > 1) {
             /*
@@ -561,21 +604,23 @@ public class DevConsole : MonoBehaviour
             }
 
 
-            if (inputEvent.Backspace(false) && inputCommand.HasText() == false) {
+            if (inputCommand.HasText() == false && inputEvent.Backspace()) {
                 if (inputCommand.argumentCount > 0) {
                     --inputCommand.argumentCount;
-                    inputCommand.inputContent.text = inputCommand.inputArgumentName[inputCommand.argumentCount].text;
+                    if (inputEvent.control == false) {
+                        inputCommand.inputContent.text = inputCommand.inputArgumentName[inputCommand.argumentCount].text;
+                    }
                     moveMarkerToEnd = 2;
                     argumentHintBump = 0;
                     selectedHint = 0;
-                    inputEvent.Use();
                 }
                 else if (inputCommand.commandIndex != -1) {
-                    inputCommand.inputContent.text = inputCommand.commandContent.text;
+                    if (inputEvent.control == false) {
+                        inputCommand.inputContent.text = inputCommand.commandContent.text;
+                    }
                     inputCommand.commandIndex = -1;
                     moveMarkerToEnd = 2;
                     argumentHintBump = 0;
-                    inputEvent.Use();
                 }
             }
 
@@ -698,8 +743,8 @@ public class DevConsole : MonoBehaviour
                 TextBuilder.Clear();
                 const string COLOR_END_TAG = "</color>";
                 string colorTag = $"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>";
-                int nameLenght = Commands[inputCommand.commandIndex].parameters[inputCommand.argumentCount].Name.Length;
-                TextBuilder.Append($"< {Commands[inputCommand.commandIndex].parameters[inputCommand.argumentCount].Name} | {Commands[inputCommand.commandIndex].parameters[inputCommand.argumentCount].ParameterType.Name} >");
+                int nameLenght = Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount].Length;
+                TextBuilder.Append($"< {Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount]} | {Commands[inputCommand.commandIndex].parameterTypes[inputCommand.argumentCount].Name} >");
                 
                 GUIContent argumentHint = new (TextBuilder.ToString());
                 Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
@@ -810,6 +855,7 @@ public class DevConsole : MonoBehaviour
         
         
         
+#if DEBUG
         /*
          * drawdebug box
          */
@@ -842,12 +888,10 @@ public class DevConsole : MonoBehaviour
 
             debug.text += text;
         }
-
-
+        
         Vector2 size = consoleSkin.box.CalcSize(debug);
-        if (true) {
-            GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
-        }
+        GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
+#endif
     }
 
 
@@ -880,14 +924,14 @@ public class DevConsole : MonoBehaviour
                 
                 bool matchingHint = true; 
                 foreach (string word in inputWords) {
-                    if (Commands[i].GetDisplayName().Contains(word, StringComparison.InvariantCultureIgnoreCase) == false) {
+                    if (Commands[i].displayName.Contains(word, StringComparison.InvariantCultureIgnoreCase) == false) {
                         matchingHint = false;
                         break;
                     }
                 }
 
                 if (matchingHint) {
-                    HintContent[hintsFound].text = Commands[i].GetFullHint();
+                    HintContent[hintsFound].text = Commands[i].hintText;
                     HintIndex[hintsFound] = i;
                     HintValue[hintsFound] = Commands[i];
                     hintsFound++;
@@ -922,7 +966,7 @@ public class DevConsole : MonoBehaviour
          */
         
         string[] inputWithoutMatches = inputCommand.inputContent.text.Split(SPACE, StringSplitOptions.RemoveEmptyEntries);
-        Type argumentType = Commands[commandIndex].parameters[argumentCount].ParameterType;
+        Type argumentType = Commands[commandIndex].parameterTypes[argumentCount];
 
         
         
@@ -1089,7 +1133,7 @@ public class DevConsole : MonoBehaviour
              */
             if (HintValue[indexOfHint].GetType() == COMMAND_TYPE) { 
                 commandIndex = HintIndex[indexOfHint];
-                commandContent.text = Commands[commandIndex].GetDisplayName();
+                commandContent.text = Commands[commandIndex].displayName;
                 return;
             }
 
@@ -1114,7 +1158,7 @@ public class DevConsole : MonoBehaviour
             if (commandIndex == -1) return false;
             
             for (int i = argumentCount; i < Commands[commandIndex].parameterCount; i++) {
-                if (Commands[commandIndex].parameters[i].HasDefaultValue == false) return false;
+                if (Commands[commandIndex].parameterHasDefault[i] == false) return false;
             }
             return true;
         }
@@ -1122,10 +1166,10 @@ public class DevConsole : MonoBehaviour
             historyCommand = new HistoryCommand();
 
             TextBuilder.Clear();
-            TextBuilder.Append($"{Commands[commandIndex].GetDisplayName()}{SPACE}");
-            historyCommand.commandDisplayName = Commands[commandIndex].GetDisplayName();
-            
-            List<Object> target = Commands[commandIndex].GetTargets();
+            TextBuilder.Append($"{Commands[commandIndex].displayName}{SPACE}");
+            historyCommand.commandDisplayName = Commands[commandIndex].displayName;
+
+
             
             object[] argumentValues = new object[Commands[commandIndex].parameterCount];
             for (int i = 0; i < argumentValues.Length; i++) {
@@ -1134,19 +1178,24 @@ public class DevConsole : MonoBehaviour
                     TextBuilder.Append($"{inputArgumentName[i].text}{SPACE}");
                 }
                 else {
-                    if (Commands[commandIndex].parameters[i].HasDefaultValue == false) 
+                    if (Commands[commandIndex].parameterHasDefault[i] == false) 
                         return false;
                     
-                    argumentValues[i] = Commands[commandIndex].parameters[i].DefaultValue;
+                    argumentValues[i] = Commands[commandIndex].defaultParamValue[i];
                 }
             }
 
-            
-            for (int i = 0; i < target.Count; i++) {
-                if (commandIndex > StaticCommandCount && target[i] == null) {
+            bool isMethod = Commands[commandIndex].commandType == CommandData.CommandType.METHOD;
+            for (int i = 0; i < Commands[commandIndex].targets.Count; i++) {
+                if (commandIndex > StaticCommandCount && Commands[commandIndex].targets[i] == null)
                     continue;
+                
+                if (isMethod) { 
+                    Commands[commandIndex].method.Invoke(Commands[commandIndex].targets[i], argumentValues);
                 }
-                Commands[commandIndex].method.Invoke(target[i], argumentValues);
+                else {
+                    Commands[commandIndex].field.SetValue(Commands[commandIndex].targets[i], argumentValues[0]);
+                }
             }
 
             historyCommand.historyCommandState = 2;
@@ -1161,27 +1210,52 @@ public class DevConsole : MonoBehaviour
         }
     }
     
-    
     struct CommandData {
+        public List<Object> targets;
+        public string displayName;
+        public string hintText;
+        public Type[] parameterTypes;
+        public string[] parameterNames;
+        public bool[] parameterHasDefault;
+        public object[] defaultParamValue;
+        public int parameterCount;
+        public CommandType commandType;
+        public enum CommandType {
+            METHOD,
+            FIELD,
+        }
         internal MethodInfo method;
-        internal ParameterInfo[] parameters;
-        internal int parameterCount;
-        string displayName;
-        string hintText;
-        List<Object> targets;
+        internal FieldInfo field;
 
-        internal void AssignCommand(DevCommand devCommand, MethodInfo methodInfo, Object target) {
-            method = methodInfo;
+        public void AssignMethod(DevCommand devCommand, object commandReference, Object target) {
+            commandType = CommandType.METHOD;
+            method = commandReference as MethodInfo;
+            if (method == null) {
+                Debug.LogError($"Error trying to assign {CommandType.METHOD}!");
+                return;
+            }
+
             displayName = string.IsNullOrEmpty(devCommand.displayName) ? method.Name : devCommand.displayName;
             
-            parameters = method.GetParameters();
-            parameterCount = parameters.Length;
+            ParameterInfo[] args = method.GetParameters();
+            parameterCount = args.Length;
+            parameterTypes = new Type[parameterCount];
+            parameterNames = new string[parameterCount];
+            parameterHasDefault = new bool[parameterCount];
+            defaultParamValue = new object[parameterCount];
+
 
             TextBuilder.Clear();
             TextBuilder.Append($"{displayName} ");
-            foreach (ParameterInfo param in parameters) {
+            for (int i = 0; i < args.Length; i++) {
+                ParameterInfo param = args[i];
                 TextBuilder.Append($"<{param.Name}> ");
+                parameterTypes[i] = param.ParameterType;
+                parameterNames[i] = param.Name;
+                parameterHasDefault[i] = param.HasDefaultValue;
+                defaultParamValue[i] = param.DefaultValue;
             }
+
             hintText = TextBuilder.ToString();
         
             
@@ -1189,10 +1263,37 @@ public class DevConsole : MonoBehaviour
             else targets.Clear();
             targets.Add(target);
         }
-        internal void AddTarget(Object target) => targets.Add(target);
-        internal string GetDisplayName() => displayName; // Using getter to make it clear that 'displayName' only set via 'AssignCommand'
-        internal string GetFullHint() => hintText;
-        internal List<Object> GetTargets() => targets;
+        
+        public void AssignField(DevCommand devCommand, object commandReference, Object target) {
+            commandType = CommandType.FIELD;
+            field = commandReference as FieldInfo;
+            if (field == null) {
+                Debug.LogError($"Error trying to assign {CommandType.FIELD}!");
+                return;
+            }
+            
+            displayName = string.IsNullOrEmpty(devCommand.displayName) ? field.Name : devCommand.displayName;
+            
+            parameterCount = 1;
+            parameterTypes = new Type[parameterCount];
+            parameterNames = new string[parameterCount];
+            parameterHasDefault = new bool[parameterCount];
+            defaultParamValue = new object[parameterCount];
+
+
+            TextBuilder.Clear();
+            TextBuilder.Append($"{displayName} ");
+            TextBuilder.Append($"<{field.Name}> ");
+            parameterTypes[0] = field.FieldType;
+            parameterNames[0] = field.Name;
+            parameterHasDefault[0] = false;
+            defaultParamValue[0] = null;
+            hintText = TextBuilder.ToString();
+            
+            if (targets == null) targets = new List<Object>();
+            else targets.Clear();
+            targets.Add(target);
+        }
     }
 
     struct HistoryCommand {
