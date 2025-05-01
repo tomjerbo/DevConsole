@@ -5,7 +5,7 @@
   "description": "A console window to run commands from.",
   "unity": "2022.0",
   "dependencies": {
-    "com.Jerbo.Inspector": "0.1.0",
+    "com.Jerbo.Inspector": "0.1.0"
   },
   "author": {
     "name": "Tom Jerbo",
