@@ -4,6 +4,7 @@
   "displayName": "DevConsole",
   "description": "A console window to run commands from.",
   "unity": "2022.0",
+  "category": "tool",
   "dependencies": {
     "com.Jerbo.Inspector": "0.1.0"
   },
