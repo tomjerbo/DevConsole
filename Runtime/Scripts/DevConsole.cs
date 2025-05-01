@@ -32,7 +32,7 @@ using Object = UnityEngine.Object;
 
 
 
-namespace Jerbo.Tools
+namespace Jerbo.DevConsole
 {
 public class DevConsole : MonoBehaviour
 {

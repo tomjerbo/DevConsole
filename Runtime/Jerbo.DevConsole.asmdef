@@ -1,0 +1,16 @@
+{
+    "name": "Jerbo.DevConsole",
+    "rootNamespace": "Jerbo.DevConsole",
+    "references": [
+        "GUID:beff77822d6ab2b4eaf84fba9184b848"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

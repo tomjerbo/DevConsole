@@ -1,0 +1,15 @@
+{
+  "name": "com.Jerbo.DevConsole",
+  "version": "0.2.0",
+  "displayName": "DevConsole",
+  "description": "A console window to run commands from.",
+  "unity": "2022.0",
+  "dependencies": {
+    "com.Jerbo.Inspector": "0.1.0",
+  },
+  "author": {
+    "name": "Tom Jerbo",
+    "email": "tomjerbo@gmail.com",
+    "url": "https://github.com/tomjerbo"
+  }
+}

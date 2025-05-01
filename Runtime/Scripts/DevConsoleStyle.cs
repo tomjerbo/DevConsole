@@ -2,7 +2,7 @@ using Jerbo.Inspector;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-namespace Jerbo.Tools {
+namespace Jerbo.DevConsole {
     public class DevConsoleStyle : ScriptableObject {
         public const string ASSET_PATH = "Dev Console Style";
         

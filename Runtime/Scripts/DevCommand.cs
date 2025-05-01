@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Jerbo.Tools {
+namespace Jerbo.DevConsole {
     
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Event)]
     public class DevCommand : Attribute {

@@ -1,7 +1,7 @@
 using Jerbo.Inspector;
 using UnityEngine;
 
-namespace Jerbo.Tools { 
+namespace Jerbo.DevConsole { 
 public class DevConsoleCache : ScriptableObject
 {
     public const string ASSET_PATH = "Dev Console Cache";

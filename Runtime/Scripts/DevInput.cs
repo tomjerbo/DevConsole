@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-namespace Jerbo.Tools {
+namespace Jerbo.DevConsole {
     public static class DevInput
     {
 
