@@ -5,9 +5,6 @@
   "description": "A console window to run commands from.",
   "unity": "2021.3",
   "category": "tool",
-  "dependencies": {
-    "com.jerbo.inspector": "git://https://github.com/tomjerbo/Inspector.git:1.0.0"
-  },
   "author": {
     "name": "Tom Jerbo",
     "email": "tomjerbo@gmail.com",
