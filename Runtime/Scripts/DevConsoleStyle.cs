@@ -5,6 +5,7 @@ namespace Jerbo.DevConsole {
         public const string ASSET_PATH = "Dev Console Style";
         
         [Header("Console Colors")]
+        public Color BackgroundColor = Color.white;
         public Color BorderColor = Color.white;
         public Color InputTextDefault = Color.white;
         public Color SelectedCommand = Color.white;
@@ -22,7 +23,8 @@ namespace Jerbo.DevConsole {
         
         [Header("Layout")]
         public float ConsoleWindowHeight = 36f;
-        public float HintBoxHeightPadding = 12f;
+        public float HintBoxBottomPadding = 6;
+        public float HintBoxHeightOffset = 0;
         
         
         [Header("Animations")]

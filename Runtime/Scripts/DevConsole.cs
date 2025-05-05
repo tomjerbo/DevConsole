@@ -55,10 +55,6 @@ public class DevConsole : MonoBehaviour
         Debug.LogError(message, context);
     }
     
-    
-    
-    
-    
     /*
      * Const
      */
@@ -135,7 +131,8 @@ public class DevConsole : MonoBehaviour
     float selectionBump;
     bool hasUnparsedHistoryCommands;
     static float argumentHintBump;
-    
+
+    GUIStyle BoxBorderSkin() => consoleSkin.customStyles[0];
     
     
     /*
@@ -812,6 +809,8 @@ public class DevConsole : MonoBehaviour
         
         GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
         Rect consoleInputBackground = new(consoleInputDrawPos, consoleInputSize);
+        GUI.Box(consoleInputBackground, string.Empty, BoxBorderSkin());
+        GUI.backgroundColor = Style.BackgroundColor;
         GUI.Box(consoleInputBackground, string.Empty);
         
         
@@ -820,7 +819,7 @@ public class DevConsole : MonoBehaviour
         if (inputCommand.commandIndex != -1) {
             
             Rect commandRect = new (consoleInputBackground) {
-                width = consoleSkin.label.CalcSize(inputCommand.commandContent).x
+                width = Mathf.Clamp(consoleSkin.label.CalcSize(inputCommand.commandContent).x, 0, consoleInputBackground.width)
             };
             GUI.contentColor = Style.SelectedCommand;
             GUI.Label(commandRect, inputCommand.commandContent);
@@ -895,31 +894,36 @@ public class DevConsole : MonoBehaviour
         if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
             float maximumWidth = 0;
 
-            float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxHeightPadding;
+            float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxBottomPadding;
             /*
-             * TODO if too many hints, show the x possible around the selected index, acting like a scrollbox
+             * TODO Only count hit sizes from the ones that are going to be displayed!
+             * height should be same for all hints, get size once and figure out how many can be displayed
+             * set hint index offset, THEN calc width for the ones that will be displayed and add a max for screen width,
+             * clamp width to hintbox width that is going to be offset as well to current arg pos
              */
             for (int i = 0; i < hintsToDisplay; i++) {
                 Vector2 hintTextSize = consoleSkin.label.CalcSize(HintContent[i]);
                 if (maximumHeight + hintTextSize.y > maxHintHeight) {
                     break;
                 }
-                maximumWidth = Mathf.Max(hintTextSize.x, maximumWidth);
+                maximumWidth = Mathf.Clamp(Mathf.Max(hintTextSize.x, maximumWidth), 0, Screen.width - WIDTH_SPACING * 2f);
                 maximumHeight += hintTextSize.y + HINT_HEIGHT_TEXT_PADDING;
                 ++hintsToDraw;
             }
             // maximumWidth += Style.SelectHintBumpOffsetAmount;
             
             
-            GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
             Rect hintBackground = new (inputFieldRect) {
                 width = maximumWidth,
-                height = maximumHeight + Style.HintBoxHeightPadding,
-                y = consoleInputDrawPos.y - Style.HintBoxHeightPadding - maximumHeight + 2,
+                height = maximumHeight + Style.HintBoxBottomPadding,
+                y = consoleInputDrawPos.y - Style.HintBoxBottomPadding - maximumHeight - Style.HintBoxHeightOffset,
             };
+
+            GUI.backgroundColor = Style.BackgroundColor;
+            GUI.Box(hintBackground, string.Empty);
+            GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
+            GUI.Box(hintBackground, string.Empty, BoxBorderSkin());
             
-            
-            GUI.Box(hintBackground, string.Empty, consoleSkin.customStyles[0]);
             Vector2 hintStartPos = hintBackground.position;
             float stepHeight = maximumHeight / hintsToDraw;
             
@@ -980,8 +984,7 @@ public class DevConsole : MonoBehaviour
         /*
          * drawdebug box
          */
-        GUI.contentColor = Color.red;
-        GUI.backgroundColor = Style.BorderColor;
+        GUI.backgroundColor = Style.BackgroundColor;
         GUIContent debug = new () {
             text = $"Selected Hint Index: {selectedHint}\n" +
                    $"Command Index: {inputCommand.commandIndex}\n" +
