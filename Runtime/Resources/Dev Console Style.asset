@@ -24,7 +24,7 @@ MonoBehaviour:
   HintTextColorSelected: {r: 1, g: 0.68725497, b: 0.34117648, a: 1}
   ConsoleWindowHeight: 36
   HintBoxBottomPadding: 0
-  HintBoxHeightOffset: 4
+  HintBoxHeightOffset: 2
   SelectHintBumpOffsetAmount: 6
   SelectHintBumpSpeed: 12
   ArgHelpBumpOffsetAmount: -6

@@ -71,7 +71,6 @@ public class DevConsole : MonoBehaviour
     const int MAX_HINTS = 32;
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
-    const float HINT_HEIGHT_TEXT_PADDING = 2f;
     const char SPACE = ' ';
     
     
@@ -889,28 +888,33 @@ public class DevConsole : MonoBehaviour
         /*
          * DrawHintBox
          */
-        int hintsToDraw = 0;
-        float maximumHeight = 0;
-        if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
-            float maximumWidth = 0;
 
-            float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxBottomPadding;
+        if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
+
             /*
              * TODO Only count hit sizes from the ones that are going to be displayed!
              * height should be same for all hints, get size once and figure out how many can be displayed
              * set hint index offset, THEN calc width for the ones that will be displayed and add a max for screen width,
              * clamp width to hintbox width that is going to be offset as well to current arg pos
              */
-            for (int i = 0; i < hintsToDisplay; i++) {
-                Vector2 hintTextSize = consoleSkin.label.CalcSize(HintContent[i]);
-                if (maximumHeight + hintTextSize.y > maxHintHeight) {
-                    break;
-                }
-                maximumWidth = Mathf.Clamp(Mathf.Max(hintTextSize.x, maximumWidth), 0, Screen.width - WIDTH_SPACING * 2f);
-                maximumHeight += hintTextSize.y + HINT_HEIGHT_TEXT_PADDING;
-                ++hintsToDraw;
+            
+            float maximumWidth = 0;
+            float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING - Style.HintBoxHeightOffset;
+            float heightPerLine = consoleSkin.label.CalcSize(HintContent[0]).y;
+            int hintsToDraw = Mathf.Clamp(Mathf.RoundToInt(maxHintHeight / heightPerLine), 1, hintsToDisplay);
+            float maximumHeight = hintsToDraw * heightPerLine;
+            
+            if (selectedHint < hint_display_index_start) {
+                hint_display_index_start = selectedHint;
+            } else if (selectedHint >= hint_display_index_start + hintsToDraw) {
+                hint_display_index_start = selectedHint - hintsToDraw + 1;
             }
-            // maximumWidth += Style.SelectHintBumpOffsetAmount;
+            hint_display_index_start = Mathf.Clamp(hint_display_index_start, 0, Mathf.Max(hintsToDisplay - hintsToDraw, 0));
+            
+            for (int i = 0; i < hintsToDraw; i++) {
+                Vector2 hintTextSize = consoleSkin.label.CalcSize(HintContent[hint_display_index_start + i]);
+                maximumWidth = Mathf.Clamp(Mathf.Max(hintTextSize.x, maximumWidth), 0, Screen.width - WIDTH_SPACING * 2f);
+            }
             
             
             Rect hintBackground = new (inputFieldRect) {
@@ -925,20 +929,11 @@ public class DevConsole : MonoBehaviour
             GUI.Box(hintBackground, string.Empty, BoxBorderSkin());
             
             Vector2 hintStartPos = hintBackground.position;
-            float stepHeight = maximumHeight / hintsToDraw;
-            
-            if (selectedHint < hint_display_index_start) {
-                hint_display_index_start = selectedHint;
-            } else if (selectedHint >= hint_display_index_start + hintsToDraw) {
-                hint_display_index_start = selectedHint - hintsToDraw + 1;
-            }
-            hint_display_index_start = Mathf.Clamp(hint_display_index_start, 0, Mathf.Max(hintsToDisplay - hintsToDraw, 0));
-            
             for (int i = 0; i < hintsToDraw; i++) {
                 bool isSelected = (hint_display_index_start + i) == selectedHint;
                 
                 float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount : 0;
-                Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
+                Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * heightPerLine);
                 
                 GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
 
@@ -947,7 +942,7 @@ public class DevConsole : MonoBehaviour
                         GUI.enabled = false;
                     }
                 }
-                GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), HintContent[hint_display_index_start + i]);
+                GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)), HintContent[hint_display_index_start + i]);
                 
                 if (GUI.enabled == false) {
                     GUI.enabled = true;
@@ -985,6 +980,8 @@ public class DevConsole : MonoBehaviour
          * drawdebug box
          */
         GUI.backgroundColor = Style.BackgroundColor;
+        GUI.contentColor = Style.InputTextDefault;
+        GUI.enabled = true;
         GUIContent debug = new () {
             text = $"Selected Hint Index: {selectedHint}\n" +
                    $"Command Index: {inputCommand.commandIndex}\n" +
