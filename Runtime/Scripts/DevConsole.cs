@@ -3,7 +3,7 @@
  */
 
 // #define URP_ENABLED
-#define CONSOLE_DEBUG
+// #define CONSOLE_DEBUG
 
 
 using System;
@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
@@ -138,6 +139,7 @@ public class DevConsole : MonoBehaviour
     Vector2 consoleInputSize;
     float selectionBump;
     bool hasUnparsedHistoryCommands;
+    bool hasUnparsedMacroCommands;
     static float argumentHintBump;
 
     GUIStyle BoxBorderSkin() => consoleSkin.customStyles[0];
@@ -576,11 +578,11 @@ public class DevConsole : MonoBehaviour
         return null;
     }
 
-    void ParseHistoryCommands() {
-        hasUnparsedHistoryCommands = false;
-        for (int i = 0; i < HistoryCommands.Count; i++) {
+    bool ConnectHistoryCommand(ref List<HistoryCommand> commands) {
+        bool hasCommandsToConnect = false;
+        for (int i = 0; i < commands.Count; i++) {
             int validArgsFound = 0;
-            HistoryCommand cmd = HistoryCommands[i];
+            HistoryCommand cmd = commands[i];
             if (cmd.historyCommandState == 0) {
                 for (int k = 0; k < totalCommandCount; k++) {
                     if (string.Equals(cmd.commandDisplayName, Commands[k].displayName, StringComparison.OrdinalIgnoreCase)) {
@@ -606,15 +608,17 @@ public class DevConsole : MonoBehaviour
             if (cmd.historyCommandState < 2) {
                 if (validArgsFound == argumentCount) {
                    cmd.historyCommandState = 2;
-                   Log($"Successfully parsed command -> {cmd.displayString}");
+                   Log($"Successfully connected command -> {cmd.displayString}");
                 }
                 else {
-                    hasUnparsedHistoryCommands = true;
+                    hasCommandsToConnect = true;
                 }
             }
             
-            HistoryCommands[i] = cmd;
+            commands[i] = cmd;
         }
+
+        return hasCommandsToConnect;
     }
     
     [DevCommand]
@@ -651,12 +655,66 @@ public class DevConsole : MonoBehaviour
             LoadInstanceCommands();
             LoadCommandHistory();
             LoadMacroCommands();
+
+            int valid = 0;
+            int invalid = 0;
+            foreach (var cmd in HistoryCommands) {
+                if (cmd.historyCommandState == 2) {
+                    valid++;
+                }
+                else {
+                    invalid++;
+                }
+            }
+
+            foreach (var cmd in macroCommands.SelectMany(macroCommand => macroCommand.commands)) {
+                if (cmd.historyCommandState == 2) {
+                    valid++;
+                }
+                else {
+                    invalid++;
+                }
+            }
+
+            Log($"Parsing sucess: {valid}/{invalid + valid}");
+            
         }
         else {
             LoadInstanceCommands();
             if (hasUnparsedHistoryCommands) {
-                ParseHistoryCommands();
+                hasUnparsedHistoryCommands = ConnectHistoryCommand(ref HistoryCommands);
             }
+            
+            if (hasUnparsedMacroCommands) {
+                for (int i = 0; i < macroCommands.Count; i++) {
+                    bool hasUnparsedCommands = ConnectHistoryCommand(ref macroCommands[i].commands);
+                    if (hasUnparsedCommands) {
+                        hasUnparsedMacroCommands = true;
+                    }
+                }
+            }
+            
+            int valid = 0;
+            int invalid = 0;
+            foreach (var cmd in HistoryCommands) {
+                if (cmd.historyCommandState == 2) {
+                    valid++;
+                }
+                else {
+                    invalid++;
+                }
+            }
+
+            foreach (var cmd in macroCommands.SelectMany(macroCommand => macroCommand.commands)) {
+                if (cmd.historyCommandState == 2) {
+                    valid++;
+                }
+                else {
+                    invalid++;
+                }
+            }
+
+            Log($"Parsing sucess: {valid}/{invalid + valid}");
         }
     }
 
