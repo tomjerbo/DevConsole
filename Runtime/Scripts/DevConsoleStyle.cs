@@ -5,7 +5,7 @@ namespace Jerbo.DevConsole {
         public const string ASSET_PATH = "Dev Console Style";
         
         [Header("Console Colors")]
-        public Color BorderColor = Color.white;
+        public Color BackgroundColor = Color.white;
         public Color InputTextDefault = Color.white;
         public Color SelectedCommand = Color.white;
         public Color SelectedArgument = Color.white;
@@ -14,6 +14,7 @@ namespace Jerbo.DevConsole {
         public Color ValidCommand = Color.white;
         public Color InputArgumentType = Color.white;
         public Color InputArgumentTypeBorder = Color.white;
+        public Color RecordMacroColor = Color.white;
         
         [Space(12)]
         public Color HintTextColorDefault = Color.white;
@@ -21,8 +22,10 @@ namespace Jerbo.DevConsole {
 
         
         [Header("Layout")]
-        public float ConsoleWindowHeight = 36f;
-        public float HintBoxHeightPadding = 12f;
+        public float ConsoleTextSize = 36f;
+        public float HintBoxBottomPadding = 6;
+        public float HintBoxHeightOffset = 0;
+        public int ConsoleIconSize = 26;
         
         
         [Header("Animations")]
@@ -33,5 +36,8 @@ namespace Jerbo.DevConsole {
         public float ArgHelpWidthPadding = 8f;
         public AnimationCurve SelectionBumpCurve;
         public AnimationCurve ArgumentTypeBumpCurve;
+        
+        [Header("Textures")] 
+        public Texture2D ConsoleIcon;
     }
 }

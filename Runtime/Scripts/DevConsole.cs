@@ -3,7 +3,7 @@
  */
 
 // #define URP_ENABLED
-#define CONSOLE_DEBUG
+// #define CONSOLE_DEBUG
 
 
 using System;
@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
@@ -55,10 +56,6 @@ public class DevConsole : MonoBehaviour
         Debug.LogError(message, context);
     }
     
-    
-    
-    
-    
     /*
      * Const
      */
@@ -75,7 +72,6 @@ public class DevConsole : MonoBehaviour
     const int MAX_HINTS = 32;
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
-    const float HINT_HEIGHT_TEXT_PADDING = 2f;
     const char SPACE = ' ';
     
     
@@ -90,6 +86,7 @@ public class DevConsole : MonoBehaviour
     static DevConsoleCache Cache;
     static DevConsoleStyle Style;
     static readonly string CommandHistoryPath = Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
+    static readonly string DevMacroPath = Path.Combine(Application.persistentDataPath, "DevConsole-Macros.txt");
     static readonly CommandData[] Commands = new CommandData[MAX_COMMANDS];
     static readonly int[] HintIndex = new int[MAX_HINTS];
     static readonly object[] HintValue = new object[MAX_HINTS];
@@ -111,10 +108,13 @@ public class DevConsole : MonoBehaviour
      * make char[] and just slice into it?
      * use helper methods to manipulate char[] without adding memory
      */
+    
     public static bool IsActive { get; private set; }
     static readonly StringBuilder TextBuilder = new (256);
-    static readonly List<HistoryCommand> HistoryCommands = new (32);
+    static List<HistoryCommand> HistoryCommands = new (32);
     readonly InputCommand inputCommand = new ();
+    List<MacroCommand> macroCommands = new();
+    MacroCommand activeMacro;
     int moveMarkerToEnd;
     int selectedHint;
     int setFocus;
@@ -124,6 +124,13 @@ public class DevConsole : MonoBehaviour
         WAIT_FOR_INPUT,
         SHOW,
     }
+    
+
+
+    class MacroCommand {
+        public KeyCode key;
+        public List<HistoryCommand> commands = new();
+    }
 
     
     // Drawing
@@ -132,23 +139,23 @@ public class DevConsole : MonoBehaviour
     Vector2 consoleInputSize;
     float selectionBump;
     bool hasUnparsedHistoryCommands;
+    bool hasUnparsedMacroCommands;
     static float argumentHintBump;
-    
+
+    GUIStyle BoxBorderSkin() => consoleSkin.customStyles[0];
     
     
     /*
      * Core console functionality
-     *
      */
     
     [DevCommand]
     void LogCache() {
-        LogError($"- Cached Assets({Cache.AssetNames.Length}) -");
+        Log($"- Cached Assets({Cache.AssetNames.Length}) -");
         for (int i = 0; i < Cache.AssetNames.Length; i++) {
-            LogError($"{Cache.AssetNames[i]} -> {Cache.AssetReferences[i].GetInstanceID()}");
+            Log($"{Cache.AssetNames[i]} -> {Cache.AssetReferences[i].GetInstanceID()}");
         }
     }
-    
     
     void InitializeConsole() {
         consoleSkin = Resources.Load<GUISkin>(DEV_CONSOLE_SKIN_PATH);
@@ -250,9 +257,9 @@ public class DevConsole : MonoBehaviour
 
     void OnDestroy() {
         SaveCommandHistory();
+        SaveMacroCommands();
         IsActive = false;
     }
-
     
     [DevCommand]
     void SaveCommandHistory() {
@@ -274,9 +281,9 @@ public class DevConsole : MonoBehaviour
     }
     
     [DevCommand]
-    void ClearCommandHistory(bool saveToFile) {
+    void ClearCommandHistory() {
         HistoryCommands.Clear();
-        if (saveToFile) SaveCommandHistory();
+        SaveCommandHistory();
     }
     
     [DevCommand]
@@ -286,9 +293,20 @@ public class DevConsole : MonoBehaviour
         HistoryCommands.Clear(); // only clear if it works?
         hasUnparsedHistoryCommands = false;
         string[] historyTextFile = File.ReadAllLines(CommandHistoryPath);
-        
-        int currentReadIndex = 0;
-        while (currentReadIndex < historyTextFile.Length) {
+        int sliceStart = 0;
+        int sliceEnd = historyTextFile.Length;
+        ParseHistoryCommands(ref HistoryCommands, ref historyTextFile, sliceStart, sliceEnd);
+        foreach (HistoryCommand cmd in HistoryCommands) {
+            if (cmd.historyCommandState != 2) {
+                hasUnparsedHistoryCommands = true;
+                break;
+            }
+        }
+    }
+
+    void ParseHistoryCommands(ref List<HistoryCommand> history, ref string[] historyTextFile, int sliceStart, int sliceEnd) {
+        int currentReadIndex = sliceStart;
+        while (currentReadIndex < sliceEnd) {
             if (int.TryParse(historyTextFile[currentReadIndex++], out int linesOfCommand) == false) {
                 LogError("Error parsing command history! Try clearing history file to remove invalid values!");
                 break;
@@ -332,15 +350,120 @@ public class DevConsole : MonoBehaviour
             if (validArgsFound == argumentCount) {
                 cmd.historyCommandState = 2;
             }
-            else {
-                hasUnparsedHistoryCommands = true;
-            }
             
-            HistoryCommands.Add(cmd);
+            history.Add(cmd);
             currentReadIndex += argumentCount;
         }
     }
+    
+    /*
+     * Shortcuts
+     * Macros where you run a series of commands to record them onto a keycode
+     * StartMacro / EndMacro command
+     *
+     * AddShortcut taking in the key and what command
+     *
+     * Saving the argument
+     */
 
+    [DevCommand]
+    void StartMacro(KeyCode key) {
+        if (activeMacro != null)
+            return;
+        
+        foreach (MacroCommand macroCommand in macroCommands) {
+            if (macroCommand.key == key) {
+                Debug.LogError($"DevConsole macro with key ({key}) already exists!");
+                return;
+            }
+        }
+        
+        activeMacro = new MacroCommand() {
+            key = key
+        };
+    }
+    
+    [DevCommand]
+    void SaveMacroCommands() {
+        if (macroCommands.Count == 0) return;
+        
+        TextBuilder.Clear();
+        TextBuilder.EnsureCapacity(4096);
+
+        foreach (MacroCommand macroCommand in macroCommands) {
+            int lines = 0;
+            foreach (HistoryCommand cmd in macroCommand.commands) {
+                TextBuilder.AppendLine((cmd.argumentValues.Length + 2).ToString());
+                TextBuilder.AppendLine(cmd.displayString);
+                TextBuilder.AppendLine(cmd.commandDisplayName);
+                lines += 3;
+                foreach (string argName in cmd.argumentDisplayName) {
+                    TextBuilder.AppendLine(argName);
+                    ++lines;
+                }
+            }
+
+            lines += 2;
+            TextBuilder.Insert(0, $"{macroCommand.key}\n");
+            TextBuilder.Insert(0, $"{lines}\n");
+        }
+        
+        File.WriteAllText(DevMacroPath, TextBuilder.ToString());
+    }
+    
+    [DevCommand]
+    void LoadMacroCommands() {
+        if (File.Exists(DevMacroPath) == false) return;
+        
+        macroCommands.Clear(); // only clear if it works?
+        string[] historyTextFile = File.ReadAllLines(DevMacroPath);
+        int i = 0;
+        while (i < historyTextFile.Length) {
+            int lines = int.Parse(historyTextFile[i]);
+            MacroCommand macroCommand = new MacroCommand {
+                key = Enum.Parse<KeyCode>(historyTextFile[i+1])
+            };
+            int sliceStart = i + 2;
+            int sliceEnd = i + lines;
+            ParseHistoryCommands(ref macroCommand.commands, ref historyTextFile, sliceStart, sliceEnd);
+            macroCommands.Add(macroCommand);
+            i += lines;
+        }
+    }
+
+    [DevCommand]
+    void ClearAllMacros() {
+        macroCommands.Clear();
+    }
+    
+    [DevCommand]
+    void RemoveMacro(KeyCode key) {
+        for (int i = macroCommands.Count - 1; i >= 0; i--) {
+            if (macroCommands[i].key == key) {
+                macroCommands.RemoveAt(i);
+                return;
+            } 
+        }
+    }
+
+    [DevCommand]
+    void ShowMacros(bool printCommandNames) {
+        foreach (MacroCommand macroCommand in macroCommands) {
+            Debug.Log($"Macro -> ({macroCommand.key})");
+            if (printCommandNames == false)
+                continue;
+            foreach (HistoryCommand command in macroCommand.commands) {
+                if (command.historyCommandState == 2) {
+                    Debug.Log($"Command: {command.commandDisplayName}");
+                }
+                else {
+                    Debug.Log($"Command [Not Parsed]: '{command.displayString}'");
+                }
+            }
+            Debug.Log("------");
+        }
+    }
+    
     object TryGetArgumentValue(ref string argumentString, int commandIndex, int argumentIndex) {
         
         /*
@@ -455,11 +578,11 @@ public class DevConsole : MonoBehaviour
         return null;
     }
 
-    void ParseHistoryCommands() {
-        hasUnparsedHistoryCommands = false;
-        for (int i = 0; i < HistoryCommands.Count; i++) {
+    bool ConnectHistoryCommand(ref List<HistoryCommand> commands) {
+        bool hasCommandsToConnect = false;
+        for (int i = 0; i < commands.Count; i++) {
             int validArgsFound = 0;
-            HistoryCommand cmd = HistoryCommands[i];
+            HistoryCommand cmd = commands[i];
             if (cmd.historyCommandState == 0) {
                 for (int k = 0; k < totalCommandCount; k++) {
                     if (string.Equals(cmd.commandDisplayName, Commands[k].displayName, StringComparison.OrdinalIgnoreCase)) {
@@ -485,24 +608,23 @@ public class DevConsole : MonoBehaviour
             if (cmd.historyCommandState < 2) {
                 if (validArgsFound == argumentCount) {
                    cmd.historyCommandState = 2;
-                   Log($"Successfully parsed command -> {cmd.displayString}");
+                   Log($"Successfully connected command -> {cmd.displayString}");
                 }
                 else {
-                    hasUnparsedHistoryCommands = true;
+                    hasCommandsToConnect = true;
                 }
             }
             
-            HistoryCommands[i] = cmd;
+            commands[i] = cmd;
         }
+
+        return hasCommandsToConnect;
     }
-    
-    
     
     [DevCommand]
-    void OpenCommandHistoryPath() {
+    void OpenSaveFolder() {
         Application.OpenURL(Application.persistentDataPath);
     }
-    
     
     
     /*
@@ -532,12 +654,67 @@ public class DevConsole : MonoBehaviour
             LoadStaticCommands();
             LoadInstanceCommands();
             LoadCommandHistory();
+            LoadMacroCommands();
+
+            int valid = 0;
+            int invalid = 0;
+            foreach (var cmd in HistoryCommands) {
+                if (cmd.historyCommandState == 2) {
+                    valid++;
+                }
+                else {
+                    invalid++;
+                }
+            }
+
+            foreach (var cmd in macroCommands.SelectMany(macroCommand => macroCommand.commands)) {
+                if (cmd.historyCommandState == 2) {
+                    valid++;
+                }
+                else {
+                    invalid++;
+                }
+            }
+
+            Log($"Parsing sucess: {valid}/{invalid + valid}");
+            
         }
         else {
             LoadInstanceCommands();
             if (hasUnparsedHistoryCommands) {
-                ParseHistoryCommands();
+                hasUnparsedHistoryCommands = ConnectHistoryCommand(ref HistoryCommands);
             }
+            
+            if (hasUnparsedMacroCommands) {
+                for (int i = 0; i < macroCommands.Count; i++) {
+                    bool hasUnparsedCommands = ConnectHistoryCommand(ref macroCommands[i].commands);
+                    if (hasUnparsedCommands) {
+                        hasUnparsedMacroCommands = true;
+                    }
+                }
+            }
+            
+            int valid = 0;
+            int invalid = 0;
+            foreach (var cmd in HistoryCommands) {
+                if (cmd.historyCommandState == 2) {
+                    valid++;
+                }
+                else {
+                    invalid++;
+                }
+            }
+
+            foreach (var cmd in macroCommands.SelectMany(macroCommand => macroCommand.commands)) {
+                if (cmd.historyCommandState == 2) {
+                    valid++;
+                }
+                else {
+                    invalid++;
+                }
+            }
+
+            Log($"Parsing sucess: {valid}/{invalid + valid}");
         }
     }
 
@@ -545,6 +722,11 @@ public class DevConsole : MonoBehaviour
     void CloseConsole() {
         IsActive = false;
         selectedHint = -1;
+        if (activeMacro != null) {
+            if (activeMacro.commands.Count > 0)
+                macroCommands.Add(activeMacro);
+            activeMacro = null;
+        }
         GUI.FocusControl(null);
         
 #if URP_ENABLED
@@ -552,39 +734,61 @@ public class DevConsole : MonoBehaviour
 #endif
     }
 
-
-
-
-    
     
     /*
-     * Main logic flow
-     */
+    * Main logic flow
+    */
 
-    
     void OnGUI() {
         Event inputEvent = Event.current;
         if (IsActive == false) {
-            if (inputEvent.OpenConsole()) OpenConsole();
+            if (inputEvent.OpenConsole()) {
+                OpenConsole();
+            }
+            else {
+                foreach (var macro in macroCommands) {
+                    if (inputEvent.KeyDown(macro.key)) {
+                        HintIndex[0] = 0;
+                        CommandHistoryState = History.SHOW;
+                        foreach (var cmd in macro.commands) {
+                            HistoryCommands.Insert(0, cmd);
+                            inputCommand.UseHint(0);
+                            if (inputCommand.CanExecuteCommand()) {
+                                inputCommand.ExecuteCommand();
+                                inputCommand.Clear();
+                            }
+                            HistoryCommands.RemoveAt(0);
+                        }
+
+                        CommandHistoryState = History.WAIT_FOR_INPUT;
+                    }
+                }
+            }
             return;
         }
 
         /*
          * Console is active
          */
-        
-        
-        if (inputEvent.CloseConsole()) CloseConsole();
-        DrawConsole();
+
+
+        if (inputEvent.CloseConsole()) {
+            CloseConsole();
+        }
+        else {
+            DrawConsole();
+        }
     }
-
-
+    
+    
     void DrawConsole() {
         float width = Screen.width;
         float height = Screen.height;
         Event inputEvent = Event.current;
+        consoleSkin.label.fontSize = (int)(Style.ConsoleTextSize - HEIGHT_SPACING);
+        consoleSkin.textField.fontSize = (int)(Style.ConsoleTextSize - HEIGHT_SPACING);
         GUI.skin = consoleSkin;
-        
+
         selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectHintBumpSpeed * Time.unscaledDeltaTime);
         argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgHelpBumpSpeed * Time.unscaledDeltaTime);
         bool windowHasFocus = GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID;
@@ -683,86 +887,115 @@ public class DevConsole : MonoBehaviour
         }
 
 
+        /*
+         * should creating a macro run the command? probably not
+         * 
+         */
+        if (inputCommand.CanExecuteCommand() && inputEvent.ExecuteCommand()) {
+            inputCommand.GenerateHistoryCommand(out HistoryCommand historyCommand);
+            if (activeMacro == null) {
+                inputCommand.ExecuteCommand();
+            }
+            else {
+                activeMacro.commands.Add(historyCommand);
+            }
         
-        if (inputCommand.CanExecuteCommand() && inputEvent.ExecuteCommand(false)) {
-            if (inputCommand.TryExecuteCommand(out HistoryCommand historyCommand)) {
-                inputEvent.Use();
-
-                for (int i = 0; i < HistoryCommands.Count; i++) {
-                    if (historyCommand.commandIndex != HistoryCommands[i].commandIndex) continue;
-                    if (historyCommand.argumentValues.Length != HistoryCommands[i].argumentValues.Length) continue;
-                    bool hasSameArguments = true;
-                    for (int k = 0; k < historyCommand.argumentValues.Length; k++) {
-                        if (historyCommand.argumentValues[k] != HistoryCommands[i].argumentValues[k]) {
-                            hasSameArguments = false;
-                            break;
-                        }
-                    }
-
-                    if (hasSameArguments) {
-                        HistoryCommands.RemoveAt(i);
+            for (int i = 0; i < HistoryCommands.Count; i++) {
+                if (historyCommand.commandIndex != HistoryCommands[i].commandIndex) continue;
+                if (historyCommand.argumentValues.Length != HistoryCommands[i].argumentValues.Length) continue;
+                bool hasSameArguments = true;
+                for (int k = 0; k < historyCommand.argumentValues.Length; k++) {
+                    if (historyCommand.argumentValues[k] != HistoryCommands[i].argumentValues[k]) {
+                        hasSameArguments = false;
                         break;
                     }
                 }
-                
-                HistoryCommands.Insert(0, historyCommand);
-                if (HistoryCommands.Count > 32) {
-                    HistoryCommands.RemoveAt(HistoryCommands.Count - 1);
+            
+                if (hasSameArguments) {
+                    HistoryCommands.RemoveAt(i);
+                    break;
                 }
+            }
+            
+            HistoryCommands.Insert(0, historyCommand);
+            if (HistoryCommands.Count > 32) {
+                HistoryCommands.RemoveAt(HistoryCommands.Count - 1);
+            }
 
-                inputCommand.Clear();
-                CommandHistoryState = History.WAIT_FOR_INPUT;
-                moveMarkerToEnd = 2;
-                hintsToDisplay = 0;
-                selectedHint = -1;
+            inputCommand.Clear();
+            CommandHistoryState = History.WAIT_FOR_INPUT;
+            moveMarkerToEnd = 2;
+            hintsToDisplay = 0;
+            selectedHint = -1;
 
+            if (activeMacro == null) {
                 CloseConsole();
             }
         }
+        
 
-
-
-
+        
         /*
          * draw console input area
          */
 
-        consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING + Style.ConsoleWindowHeight));
-        consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, Style.ConsoleWindowHeight);
+        consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING * 2f + Style.ConsoleTextSize));
+        consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, Style.ConsoleTextSize);
         
-        GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
         Rect consoleInputBackground = new(consoleInputDrawPos, consoleInputSize);
+        GUI.backgroundColor = activeMacro == null ? Style.BackgroundColor : Style.RecordMacroColor;
+        GUI.Box(consoleInputBackground, string.Empty, BoxBorderSkin());
+        GUI.backgroundColor = Style.BackgroundColor;
         GUI.Box(consoleInputBackground, string.Empty);
         
         
+        /*
+         * icon
+         */
+        Vector2 iconSize = Vector2.one * Style.ConsoleIconSize;
+        Vector2 iconOffset = (Style.ConsoleTextSize - Style.ConsoleIconSize) * 0.5f * Vector2.one;
+        iconOffset.x = WIDTH_SPACING;
+        
+        Rect consoleIconRect = new Rect(consoleInputDrawPos + iconOffset, iconSize);
+        GUI.DrawTexture(consoleIconRect, Style.ConsoleIcon, ScaleMode.StretchToFill, true);
+        
         GUI.backgroundColor = Color.clear;
-        float drawPosX = consoleInputBackground.x;
+        
+        float inputFieldPosX = consoleInputBackground.x + consoleIconRect.width + WIDTH_SPACING;
+        float inputFieldXmax = consoleInputBackground.xMax - consoleIconRect.width;
+        float inputFieldHeight = consoleInputBackground.height;
+        
         if (inputCommand.commandIndex != -1) {
-            
-            Rect commandRect = new (consoleInputBackground) {
-                width = consoleSkin.label.CalcSize(inputCommand.commandContent).x
+            Rect commandRect = new () {
+                width = Mathf.Clamp(
+                    consoleSkin.label.CalcSize(inputCommand.commandContent).x, 
+                    0, 
+                    inputFieldXmax),
+                height = inputFieldHeight,
+                position = new Vector2(inputFieldPosX, consoleInputDrawPos.y)
             };
-            GUI.contentColor = Style.SelectedCommand;
+            GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.SelectedCommand;
             GUI.Label(commandRect, inputCommand.commandContent);
-            drawPosX = commandRect.xMax - WIDTH_SPACING;
+            inputFieldPosX = commandRect.xMax - WIDTH_SPACING;
             
-            GUI.contentColor = Style.SelectedArgument;
+            GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.SelectedArgument;
             for (int i = 0; i < inputCommand.argumentCount; i++) {
                 Rect argRect = new (commandRect) {
                     width = consoleSkin.label.CalcSize(inputCommand.inputArgumentName[i]).x,
-                    x = drawPosX
+                    height = inputFieldHeight,
+                    x = inputFieldPosX
                 };
                 GUI.Label(argRect, inputCommand.inputArgumentName[i]);
-                drawPosX = argRect.xMax - WIDTH_SPACING;
+                inputFieldPosX = argRect.xMax - WIDTH_SPACING;
             }
         }
         
-        
+        GUI.backgroundColor = Color.clear;
         GUI.contentColor = Style.InputTextDefault;
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
         Rect inputFieldRect = new (consoleInputBackground) {
-            x = drawPosX,
-            width = consoleInputBackground.width - (drawPosX - consoleInputBackground.x)
+            x = inputFieldPosX,
+            width = consoleInputBackground.xMax - inputFieldPosX,
         };
         string inputText = GUI.TextField(inputFieldRect, inputCommand.inputContent.text);
         inputCommand.inputContent.text = inputText;
@@ -776,8 +1009,8 @@ public class DevConsole : MonoBehaviour
                 TextBuilder.Clear();
                 const string COLOR_END_TAG = "</color>";
                 string colorTag = $"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>";
-                int nameLenght = Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount].Length;
-                TextBuilder.Append($"< {Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount]} | {Commands[inputCommand.commandIndex].parameterTypes[inputCommand.argumentCount].Name} >");
+                // int nameLenght = Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount].Length;
+                TextBuilder.Append($"({Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount]})");
                 
                 GUIContent argumentHint = new (TextBuilder.ToString());
                 Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
@@ -788,8 +1021,8 @@ public class DevConsole : MonoBehaviour
                 argumentHintRect.position += new Vector2(Style.ArgHelpWidthPadding, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgHelpBumpOffsetAmount);
 
                 // Middle
-                TextBuilder.Insert(nameLenght + 4, COLOR_END_TAG);
-                TextBuilder.Insert(nameLenght + 3, colorTag);
+                // TextBuilder.Insert(nameLenght + 4, COLOR_END_TAG);
+                // TextBuilder.Insert(nameLenght + 3, colorTag);
                 
                 // Start
                 TextBuilder.Insert(1, COLOR_END_TAG);
@@ -810,38 +1043,13 @@ public class DevConsole : MonoBehaviour
         /*
          * DrawHintBox
          */
-        int hintsToDraw = 0;
-        float maximumHeight = 0;
+
         if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
             float maximumWidth = 0;
-
-            float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxHeightPadding;
-            /*
-             * TODO if too many hints, show the x possible around the selected index, acting like a scrollbox
-             */
-            for (int i = 0; i < hintsToDisplay; i++) {
-                Vector2 hintTextSize = consoleSkin.label.CalcSize(HintContent[i]);
-                if (maximumHeight + hintTextSize.y > maxHintHeight) {
-                    break;
-                }
-                maximumWidth = Mathf.Max(hintTextSize.x, maximumWidth);
-                maximumHeight += hintTextSize.y + HINT_HEIGHT_TEXT_PADDING;
-                ++hintsToDraw;
-            }
-            // maximumWidth += Style.SelectHintBumpOffsetAmount;
-            
-            
-            GUI.backgroundColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.BorderColor;
-            Rect hintBackground = new (inputFieldRect) {
-                width = maximumWidth,
-                height = maximumHeight + Style.HintBoxHeightPadding,
-                y = consoleInputDrawPos.y - Style.HintBoxHeightPadding - maximumHeight + 2,
-            };
-            
-            
-            GUI.Box(hintBackground, string.Empty, consoleSkin.customStyles[0]);
-            Vector2 hintStartPos = hintBackground.position;
-            float stepHeight = maximumHeight / hintsToDraw;
+            float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING * 2 - Style.HintBoxHeightOffset;
+            float heightPerLine = consoleSkin.label.CalcSize(HintContent[0]).y;
+            int hintsToDraw = Mathf.Clamp(Mathf.RoundToInt(maxHintHeight / heightPerLine), 1, hintsToDisplay);
+            float maximumHeight = hintsToDraw * heightPerLine;
             
             if (selectedHint < hint_display_index_start) {
                 hint_display_index_start = selectedHint;
@@ -851,10 +1059,27 @@ public class DevConsole : MonoBehaviour
             hint_display_index_start = Mathf.Clamp(hint_display_index_start, 0, Mathf.Max(hintsToDisplay - hintsToDraw, 0));
             
             for (int i = 0; i < hintsToDraw; i++) {
+                Vector2 hintTextSize = consoleSkin.label.CalcSize(HintContent[hint_display_index_start + i]);
+                maximumWidth = Mathf.Clamp(Mathf.Max(hintTextSize.x, maximumWidth), 0, Screen.width - WIDTH_SPACING * 2f);
+            }
+            
+            
+            Rect hintBackground = new (inputFieldRect) {
+                width = maximumWidth,
+                height = maximumHeight + Style.HintBoxBottomPadding,
+                y = consoleInputDrawPos.y - Style.HintBoxBottomPadding - maximumHeight - Style.HintBoxHeightOffset,
+            };
+
+            GUI.backgroundColor = Style.BackgroundColor;
+            GUI.Box(hintBackground, string.Empty);
+            GUI.Box(hintBackground, string.Empty, BoxBorderSkin());
+            
+            Vector2 hintStartPos = hintBackground.position;
+            for (int i = 0; i < hintsToDraw; i++) {
                 bool isSelected = (hint_display_index_start + i) == selectedHint;
                 
                 float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount : 0;
-                Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * stepHeight);
+                Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * heightPerLine);
                 
                 GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
 
@@ -863,7 +1088,7 @@ public class DevConsole : MonoBehaviour
                         GUI.enabled = false;
                     }
                 }
-                GUI.Label(new Rect(pos, new Vector2(maximumWidth, stepHeight)), HintContent[hint_display_index_start + i]);
+                GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)), HintContent[hint_display_index_start + i]);
                 
                 if (GUI.enabled == false) {
                     GUI.enabled = true;
@@ -900,8 +1125,9 @@ public class DevConsole : MonoBehaviour
         /*
          * drawdebug box
          */
-        GUI.contentColor = Color.red;
-        GUI.backgroundColor = Style.BorderColor;
+        GUI.backgroundColor = Style.BackgroundColor;
+        GUI.contentColor = Style.InputTextDefault;
+        GUI.enabled = true;
         GUIContent debug = new () {
             text = $"Selected Hint Index: {selectedHint}\n" +
                    $"Command Index: {inputCommand.commandIndex}\n" +
@@ -1200,7 +1426,6 @@ public class DevConsole : MonoBehaviour
             /*
              * Are we applying from history?
              */
-            
             if (CommandHistoryState == History.SHOW) {
                 HistoryCommand historyCommand = HistoryCommands[HintIndex[indexOfHint]];
                 commandIndex = historyCommand.commandIndex;
@@ -1214,7 +1439,6 @@ public class DevConsole : MonoBehaviour
                 inputContent.text = string.Empty;
                 return;
             }
-            
             
             
             /*
@@ -1267,25 +1491,34 @@ public class DevConsole : MonoBehaviour
             }
             return true;
         }
-        internal bool TryExecuteCommand(out HistoryCommand historyCommand) {
+        internal void GenerateHistoryCommand(out HistoryCommand historyCommand) {
             historyCommand = new HistoryCommand();
 
             TextBuilder.Clear();
             TextBuilder.Append($"{Commands[commandIndex].displayName}{SPACE}");
             historyCommand.commandDisplayName = Commands[commandIndex].displayName;
-
-
+            historyCommand.historyCommandState = 2;
+            historyCommand.commandIndex = commandIndex;
+            historyCommand.argumentValues = inputArgumentValue[..argumentCount];
+            historyCommand.argumentDisplayName = new string[argumentCount];
             
+            for (int i = 0; i < argumentCount; i++) {
+                historyCommand.argumentDisplayName[i] = inputArgumentName[i].text;
+            }
+            
+            for (int i = 0; i < inputArgumentName.Length; i++) {
+                TextBuilder.Append($"{inputArgumentName[i].text}{SPACE}");
+            }
+            
+            historyCommand.displayString = TextBuilder.ToString();
+        }
+        internal void ExecuteCommand() {
             object[] argumentValues = new object[Commands[commandIndex].parameterCount];
             for (int i = 0; i < argumentValues.Length; i++) {
                 if (i < argumentCount) {
                     argumentValues[i] = inputArgumentValue[i];
-                    TextBuilder.Append($"{inputArgumentName[i].text}{SPACE}");
                 }
                 else {
-                    if (Commands[commandIndex].parameterHasDefault[i] == false) 
-                        return false;
-                    
                     argumentValues[i] = Commands[commandIndex].defaultParamValue[i];
                 }
             }
@@ -1322,16 +1555,6 @@ public class DevConsole : MonoBehaviour
                     }
                 }
             }
-
-            historyCommand.historyCommandState = 2;
-            historyCommand.commandIndex = commandIndex;
-            historyCommand.argumentValues = inputArgumentValue[..argumentCount];
-            historyCommand.argumentDisplayName = new string[argumentCount];
-            for (int i = 0; i < argumentCount; i++) {
-                historyCommand.argumentDisplayName[i] = inputArgumentName[i].text;
-            }
-            historyCommand.displayString = TextBuilder.ToString();
-            return true;
         }
     }
     
