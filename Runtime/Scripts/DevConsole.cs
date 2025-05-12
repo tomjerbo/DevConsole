@@ -73,7 +73,10 @@ public class DevConsole : MonoBehaviour
     const float WIDTH_SPACING = 8f;
     const float HEIGHT_SPACING = 8f;
     const char SPACE = ' ';
-    
+
+
+    const int HISTORY_COMMAND_FILE_VERSION = 0;
+    const int MACRO_COMMAND_FILE_VERSION = 0;
     
     
     /*
@@ -256,17 +259,18 @@ public class DevConsole : MonoBehaviour
     }
 
     void OnDestroy() {
-        SaveCommandHistory();
+        SaveHistoryCommands();
         SaveMacroCommands();
         IsActive = false;
     }
     
     [DevCommand]
-    void SaveCommandHistory() {
+    void SaveHistoryCommands() {
         if (HistoryCommands.Count == 0) return;
         
         TextBuilder.Clear();
         TextBuilder.EnsureCapacity(4096);
+        TextBuilder.AppendLine(HISTORY_COMMAND_FILE_VERSION.ToString());
         
         foreach (HistoryCommand cmd in HistoryCommands) {
             TextBuilder.AppendLine((cmd.argumentValues.Length + 2).ToString());
@@ -283,17 +287,22 @@ public class DevConsole : MonoBehaviour
     [DevCommand]
     void ClearCommandHistory() {
         HistoryCommands.Clear();
-        SaveCommandHistory();
+        SaveHistoryCommands();
     }
     
     [DevCommand]
-    void LoadCommandHistory() {
+    void LoadHistoryCommands() {
         if (File.Exists(CommandHistoryPath) == false) return;
         
         HistoryCommands.Clear(); // only clear if it works?
         hasUnparsedHistoryCommands = false;
         string[] historyTextFile = File.ReadAllLines(CommandHistoryPath);
-        int sliceStart = 0;
+        if (int.TryParse(historyTextFile[0], out int file_version)) {
+            /*
+             * TODO do something with the file_version
+             */
+        }
+        int sliceStart = 1;
         int sliceEnd = historyTextFile.Length;
         ParseHistoryCommands(ref HistoryCommands, ref historyTextFile, sliceStart, sliceEnd);
         foreach (HistoryCommand cmd in HistoryCommands) {
@@ -389,6 +398,7 @@ public class DevConsole : MonoBehaviour
         
         TextBuilder.Clear();
         TextBuilder.EnsureCapacity(4096);
+        TextBuilder.AppendLine(MACRO_COMMAND_FILE_VERSION.ToString());
 
         foreach (MacroCommand macroCommand in macroCommands) {
             int lines = 0;
@@ -417,7 +427,13 @@ public class DevConsole : MonoBehaviour
         
         macroCommands.Clear(); // only clear if it works?
         string[] historyTextFile = File.ReadAllLines(DevMacroPath);
-        int i = 0;
+        if (int.TryParse(historyTextFile[0], out int file_version)) {
+            /*
+             * TODO do something with the file_version
+             */
+        }
+        
+        int i = 1;
         while (i < historyTextFile.Length) {
             int lines = int.Parse(historyTextFile[i]);
             MacroCommand macroCommand = new MacroCommand {
@@ -653,7 +669,7 @@ public class DevConsole : MonoBehaviour
             InitializeConsole();
             LoadStaticCommands();
             LoadInstanceCommands();
-            LoadCommandHistory();
+            LoadHistoryCommands();
             LoadMacroCommands();
 
             int valid = 0;
