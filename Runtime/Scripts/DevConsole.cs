@@ -75,8 +75,8 @@ public class DevConsole : MonoBehaviour
     const char SPACE = ' ';
 
 
-    const int HISTORY_COMMAND_FILE_VERSION = 0;
-    const int MACRO_COMMAND_FILE_VERSION = 0;
+    const string HISTORY_COMMAND_FILE_VERSION = "FileVersion 0.1";
+    const string MACRO_COMMAND_FILE_VERSION = "FileVersion 0.1";
     
     
     /*
@@ -266,11 +266,9 @@ public class DevConsole : MonoBehaviour
     
     [DevCommand]
     void SaveHistoryCommands() {
-        if (HistoryCommands.Count == 0) return;
-        
         TextBuilder.Clear();
         TextBuilder.EnsureCapacity(4096);
-        TextBuilder.AppendLine(HISTORY_COMMAND_FILE_VERSION.ToString());
+        TextBuilder.AppendLine(HISTORY_COMMAND_FILE_VERSION);
         
         foreach (HistoryCommand cmd in HistoryCommands) {
             TextBuilder.AppendLine((cmd.argumentValues.Length + 2).ToString());
@@ -297,11 +295,18 @@ public class DevConsole : MonoBehaviour
         HistoryCommands.Clear(); // only clear if it works?
         hasUnparsedHistoryCommands = false;
         string[] historyTextFile = File.ReadAllLines(CommandHistoryPath);
-        if (int.TryParse(historyTextFile[0], out int file_version)) {
-            /*
-             * TODO do something with the file_version
-             */
+        if (historyTextFile[0] == HISTORY_COMMAND_FILE_VERSION) {
+            
         }
+        else {
+            /*
+             * Handle versions
+             */
+            ClearCommandHistory();
+            Debug.LogError("Invalid version of CommandHistory save file found!");
+            return;
+        }
+        
         int sliceStart = 1;
         int sliceEnd = historyTextFile.Length;
         ParseHistoryCommands(ref HistoryCommands, ref historyTextFile, sliceStart, sliceEnd);
@@ -394,11 +399,10 @@ public class DevConsole : MonoBehaviour
     
     [DevCommand]
     void SaveMacroCommands() {
-        if (macroCommands.Count == 0) return;
-        
         TextBuilder.Clear();
         TextBuilder.EnsureCapacity(4096);
-        TextBuilder.AppendLine(MACRO_COMMAND_FILE_VERSION.ToString());
+        TextBuilder.AppendLine(MACRO_COMMAND_FILE_VERSION);
+        int macroStartIndex = TextBuilder.Length;
 
         foreach (MacroCommand macroCommand in macroCommands) {
             int lines = 0;
@@ -414,8 +418,9 @@ public class DevConsole : MonoBehaviour
             }
 
             lines += 2;
-            TextBuilder.Insert(0, $"{macroCommand.key}\n");
-            TextBuilder.Insert(0, $"{lines}\n");
+            TextBuilder.Insert(macroStartIndex, $"{macroCommand.key}\n");
+            TextBuilder.Insert(macroStartIndex, $"{lines}\n");
+            macroStartIndex = TextBuilder.Length;
         }
         
         File.WriteAllText(DevMacroPath, TextBuilder.ToString());
@@ -427,10 +432,16 @@ public class DevConsole : MonoBehaviour
         
         macroCommands.Clear(); // only clear if it works?
         string[] historyTextFile = File.ReadAllLines(DevMacroPath);
-        if (int.TryParse(historyTextFile[0], out int file_version)) {
+        if (historyTextFile[0] == MACRO_COMMAND_FILE_VERSION) {
+            
+        }
+        else {
             /*
-             * TODO do something with the file_version
+             * Handle versions
              */
+            ClearAllMacros();
+            Debug.LogError("Invalid version of MacroCommand save file found!");
+            return;
         }
         
         int i = 1;
@@ -672,27 +683,30 @@ public class DevConsole : MonoBehaviour
             LoadHistoryCommands();
             LoadMacroCommands();
 
-            int valid = 0;
-            int invalid = 0;
+            
+            int validH = 0;
+            int validM = 0;
+            int invalidH = 0;
+            int invalidM = 0;
             foreach (var cmd in HistoryCommands) {
                 if (cmd.historyCommandState == 2) {
-                    valid++;
+                    validH++;
                 }
                 else {
-                    invalid++;
+                    invalidH++;
                 }
             }
 
             foreach (var cmd in macroCommands.SelectMany(macroCommand => macroCommand.commands)) {
                 if (cmd.historyCommandState == 2) {
-                    valid++;
+                    validM++;
                 }
                 else {
-                    invalid++;
+                    invalidM++;
                 }
             }
 
-            Log($"Parsing sucess: {valid}/{invalid + valid}");
+            Log($"Parsing success: H->{validH}/{invalidH + validH} | M->{validM}/{invalidM + validM}");
             
         }
         else {
@@ -710,27 +724,29 @@ public class DevConsole : MonoBehaviour
                 }
             }
             
-            int valid = 0;
-            int invalid = 0;
+            int validH = 0;
+            int validM = 0;
+            int invalidH = 0;
+            int invalidM = 0;
             foreach (var cmd in HistoryCommands) {
                 if (cmd.historyCommandState == 2) {
-                    valid++;
+                    validH++;
                 }
                 else {
-                    invalid++;
+                    invalidH++;
                 }
             }
 
             foreach (var cmd in macroCommands.SelectMany(macroCommand => macroCommand.commands)) {
                 if (cmd.historyCommandState == 2) {
-                    valid++;
+                    validM++;
                 }
                 else {
-                    invalid++;
+                    invalidM++;
                 }
             }
 
-            Log($"Parsing sucess: {valid}/{invalid + valid}");
+            Log($"Parsing success: H->{validH}/{invalidH + validH} | M->{validM}/{invalidM + validM}");
         }
     }
 
