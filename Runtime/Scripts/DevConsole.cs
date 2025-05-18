@@ -185,8 +185,30 @@ public class DevConsole : MonoBehaviour
 #else
             Cache = cacheObjects[0];
 #endif
-        
+
+        DevConsoleStyle[] consoleStyles = Resources.FindObjectsOfTypeAll<DevConsoleStyle>();
         Style = Resources.Load<DevConsoleStyle>(DevConsoleStyle.BASE_ASSET_PATH);
+#if UNITY_EDITOR
+        if (consoleStyles == null || consoleStyles.Length < 2) {
+            string resourcesPath = Path.Join(PLUGINS_FOLDER_PATH, RESOURCES_FOLDER_PATH);
+            if (Directory.Exists(resourcesPath) == false) {
+                Directory.CreateDirectory(resourcesPath);
+            }
+
+            DevConsoleStyle newStyle = ScriptableObject.Instantiate(Style);
+            Style = newStyle;
+            Style.name = nameof(DevConsoleStyle);
+            UnityEditor.AssetDatabase.CreateAsset(Style, Path.Combine(resourcesPath, $"{Style.name}.asset"));
+            UnityEditor.AssetDatabase.SaveAssets();
+        }
+#else
+        foreach (var styleObject in consoleStyles) {
+            if (Style == styleObject)
+                continue;
+            Style = styleObject;
+            break;
+        }
+#endif
         
         
         
@@ -200,6 +222,7 @@ public class DevConsole : MonoBehaviour
         }
     }
     
+        
     void LoadStaticCommands() {
         Type[] assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
         foreach (Type loadedType in assemblyTypes) {
