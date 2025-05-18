@@ -3,11 +3,31 @@ using UnityEngine;
 namespace Jerbo.DevConsole { 
 public class DevConsoleCache : ScriptableObject
 {
-    public const string ASSET_PATH = "Dev Console Cache";
     static string[] SEARCH_FOLDERS = { "Assets" };
     [HideInInspector, SerializeField] public ScriptableObject[] AssetReferences;
     [HideInInspector, SerializeField] public string[] AssetNames;
+    public int cacheSize;
     
+    [DevCommand]
+    void LogCache() {
+        if (AssetNames == null) {
+            Debug.Log("- DevConsle Cache is null! - ");
+            return;
+        }
+        
+        if (AssetNames.Length == 0) {
+            Debug.Log("- DevConsole Cache is empty! -");
+            return;
+        }
+        
+        Debug.Log($"- DevConsole Cached Assets({AssetNames.Length}) -");
+        for (int i = 0; i < AssetNames.Length; i++) {
+            Debug.Log($"{AssetNames[i]}");
+        }
+
+        Debug.Log("- End of cache -");
+    }
+
 #if UNITY_EDITOR
 
     /*
@@ -25,13 +45,19 @@ public class DevConsoleCache : ScriptableObject
     
     /*
      * Caching method
+     * TODO make loading assets async!
      */
     
     [DevCommand("RebuildCache")]
     internal static void CacheAssetReferences() {
-        DevConsoleCache cache = Resources.Load<DevConsoleCache>(ASSET_PATH);
-    
-        
+        DevConsoleCache[] cacheObjects = Resources.FindObjectsOfTypeAll<DevConsoleCache>();
+
+        if (cacheObjects == null || cacheObjects.Length == 0) {
+            Debug.Log("Failed to load DevConsoleCache!");
+            return;
+        }
+        DevConsoleCache cache = cacheObjects[0];
+
         string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}", SEARCH_FOLDERS);
         cache.AssetReferences = new ScriptableObject[assetGuids.Length];
         cache.AssetNames = new string[assetGuids.Length];
@@ -42,8 +68,9 @@ public class DevConsoleCache : ScriptableObject
             cache.AssetReferences[i] = UnityEditor.AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
             cache.AssetNames[i] = cache.AssetReferences[i].name;
         }
-        
-        Debug.Log($"DevConsole Cached -> {cache.AssetReferences.Length} ScriptableObjects");
+
+        cache.cacheSize = assetGuids.Length; 
+        Debug.Log($"({cache.name}) Cached -> {cache.AssetReferences.Length} ScriptableObjects");
     }
     
 #endif

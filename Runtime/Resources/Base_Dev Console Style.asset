@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b185ae0910444e47b115db3a4df3937e, type: 3}
-  m_Name: Dev Console Style
+  m_Name: Base_Dev Console Style
   m_EditorClassIdentifier: 
   BackgroundColor: {r: 0.1792453, g: 0.1792453, b: 0.1792453, a: 1}
   InputTextDefault: {r: 0.54901963, g: 0.54901963, b: 0.54901963, a: 1}
