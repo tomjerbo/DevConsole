@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Jerbo.DevConsole {
     public class DevConsoleStyle : ScriptableObject {
-        public const string ASSET_PATH = "Dev Console Style";
+        public const string BASE_ASSET_PATH = "Base_Dev Console Style";
         
         [Header("Console Colors")]
         public Color BackgroundColor = Color.white;

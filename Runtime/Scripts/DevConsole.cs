@@ -24,11 +24,12 @@ using Object = UnityEngine.Object;
  * Check how generic parameters are handled
  * Check how override methods are handled
  * Add toast menu for executed commands
- *
+ * URP define easily editable, want to have a settings object with a bool
+ * Cache not being saved between sessions when stored in package folder, create folder for assets
+ * inside Assets/Plugins to store in
+ * 
  * Load/Save location for builds is not the same as editor
  *
- * Make container ScriptableObject for DevConsole, have it spawn in console & hold references to data objects
- * so unity doesn't ignore them when building and it also removes need to load stuff from resources!
  */
 
 
@@ -65,8 +66,20 @@ public class DevConsole : MonoBehaviour
     const BindingFlags INSTANCED_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Instance;
     const BindingFlags STATIC_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Static;
 
-    
+    /*
+     * Assets
+     */
+
     const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
+    const string PLUGINS_FOLDER_PATH = "Assets/Plugins/DevConsole";
+    const string RESOURCES_FOLDER_PATH = "/Resources";
+    const string HISTORY_COMMAND_FILE_VERSION = "FileVersion 0.1";
+    const string MACRO_COMMAND_FILE_VERSION = "FileVersion 0.1";
+
+    
+    /*
+     * Console
+     */
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
     const int MAX_COMMANDS = 256;
     const int MAX_HINTS = 32;
@@ -75,9 +88,6 @@ public class DevConsole : MonoBehaviour
     const char SPACE = ' ';
 
 
-    const string HISTORY_COMMAND_FILE_VERSION = "FileVersion 0.1";
-    const string MACRO_COMMAND_FILE_VERSION = "FileVersion 0.1";
-    
     
     /*
      * Instanced
@@ -152,18 +162,57 @@ public class DevConsole : MonoBehaviour
      * Core console functionality
      */
     
-    [DevCommand]
-    void LogCache() {
-        Log($"- Cached Assets({Cache.AssetNames.Length}) -");
-        for (int i = 0; i < Cache.AssetNames.Length; i++) {
-            Log($"{Cache.AssetNames[i]} -> {Cache.AssetReferences[i].GetInstanceID()}");
-        }
-    }
     
     void InitializeConsole() {
+        DevConsoleCache[] cacheObjects = Resources.FindObjectsOfTypeAll<DevConsoleCache>();
+        
+        /*
+         * TODO want to move this out of devconsole init, this should be ideally be done once in the editor when adding the package
+         * and maybe when we're caching assets outside of playmode to avoid lagging!
+         */
+#if UNITY_EDITOR
+        if (cacheObjects == null || cacheObjects.Length == 0) {
+            string resourcesPath = Path.Join(PLUGINS_FOLDER_PATH, RESOURCES_FOLDER_PATH);
+            if (Directory.Exists(resourcesPath) == false) {
+                Directory.CreateDirectory(resourcesPath);
+            }
+            
+            Cache = ScriptableObject.CreateInstance<DevConsoleCache>();
+            Cache.name = nameof(DevConsoleCache);
+            UnityEditor.AssetDatabase.CreateAsset(Cache, Path.Combine(resourcesPath, $"{Cache.name}.asset"));
+            UnityEditor.AssetDatabase.SaveAssets();
+        }
+#else
+            Cache = cacheObjects[0];
+#endif
+
+        DevConsoleStyle[] consoleStyles = Resources.FindObjectsOfTypeAll<DevConsoleStyle>();
+        Style = Resources.Load<DevConsoleStyle>(DevConsoleStyle.BASE_ASSET_PATH);
+#if UNITY_EDITOR
+        if (consoleStyles == null || consoleStyles.Length < 2) {
+            string resourcesPath = Path.Join(PLUGINS_FOLDER_PATH, RESOURCES_FOLDER_PATH);
+            if (Directory.Exists(resourcesPath) == false) {
+                Directory.CreateDirectory(resourcesPath);
+            }
+
+            DevConsoleStyle newStyle = ScriptableObject.Instantiate(Style);
+            Style = newStyle;
+            Style.name = nameof(DevConsoleStyle);
+            UnityEditor.AssetDatabase.CreateAsset(Style, Path.Combine(resourcesPath, $"{Style.name}.asset"));
+            UnityEditor.AssetDatabase.SaveAssets();
+        }
+#else
+        foreach (var styleObject in consoleStyles) {
+            if (Style == styleObject)
+                continue;
+            Style = styleObject;
+            break;
+        }
+#endif
+        
+        
+        
         consoleSkin = Resources.Load<GUISkin>(DEV_CONSOLE_SKIN_PATH);
-        Cache = Resources.Load<DevConsoleCache>(DevConsoleCache.ASSET_PATH);
-        Style = Resources.Load<DevConsoleStyle>(DevConsoleStyle.ASSET_PATH);
         Array.Fill(HintValue, COMMAND_TYPE);
         for (int i = 0; i < HintContent.Length; i++) {
             HintContent[i] = new GUIContent();
@@ -173,6 +222,7 @@ public class DevConsole : MonoBehaviour
         }
     }
     
+        
     void LoadStaticCommands() {
         Type[] assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
         foreach (Type loadedType in assemblyTypes) {
