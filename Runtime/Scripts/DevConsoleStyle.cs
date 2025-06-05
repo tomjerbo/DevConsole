@@ -4,6 +4,10 @@ namespace Jerbo.DevConsole {
     public class DevConsoleStyle : ScriptableObject {
         public const string BASE_ASSET_PATH = "Base_Dev Console Style";
         
+        [Header("Core")] 
+        public Texture2D ConsoleIcon;
+        public GUISkin ConsoleSkin; 
+            
         [Header("Console Colors")]
         public Color BackgroundColor = Color.white;
         public Color InputTextDefault = Color.white;
@@ -36,8 +40,5 @@ namespace Jerbo.DevConsole {
         public float ArgHelpWidthPadding = 8f;
         public AnimationCurve SelectionBumpCurve;
         public AnimationCurve ArgumentTypeBumpCurve;
-        
-        [Header("Textures")] 
-        public Texture2D ConsoleIcon;
     }
 }

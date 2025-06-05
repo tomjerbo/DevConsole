@@ -38,17 +38,20 @@ namespace Jerbo.DevConsole
 {
 public class DevConsole : MonoBehaviour
 {
+    
+#if UNITY_EDITOR
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void SpawnConsoleInScene() {
         if (FindAnyObjectByType<DevConsole>() != null) {
             Debug.Log("Dev console already exists, not creating a new one!");
             return;
         }
-        GameObject consoleContainer = new ("- Dev Console -");
-        consoleContainer.AddComponent<DevConsole>();
-        DontDestroyOnLoad(consoleContainer);
+        GameObject consoleContainer = new ("- Dev Console (Editor) -");
+        DevConsole console = consoleContainer.AddComponent<DevConsole>();
+        DontDestroyOnLoad(console);
         IsActive = false;
     }
+#endif
     
     
     [Conditional("CONSOLE_DEBUG")]
@@ -59,6 +62,14 @@ public class DevConsole : MonoBehaviour
     [Conditional("CONSOLE_DEBUG")]
     void LogError(string message, Object context = null) {
         Debug.LogError(message, context);
+    }
+
+    [DevCommand]
+    void PrintCache() {
+        if (hasConsoleBeenInitialized == false)
+            return;
+        
+        Cache.PrintCache();
     }
     
     /*
@@ -74,10 +85,10 @@ public class DevConsole : MonoBehaviour
      * Assets
      */
 
-    const string DEV_CONSOLE_SKIN_PATH = PLUGINS_FOLDER_PATH + "DevConsoleSkin";
-    const string DEV_CONSOLE_CACHE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleCache";
-    const string DEV_CONSOLE_STYLE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleSkin";
-    const string PLUGINS_FOLDER_PATH = "Assets/Plugins/DevConsole";
+    const string DEV_CONSOLE_SKIN_PATH = PLUGINS_FOLDER_PATH + "DevConsoleSkin.asset";
+    const string DEV_CONSOLE_CACHE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleCache.asset";
+    const string DEV_CONSOLE_STYLE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleStyle.asset";
+    const string PLUGINS_FOLDER_PATH = "Assets/Plugins/DevConsole/";
     const string HISTORY_COMMAND_FILE_VERSION = "FileVersion 0.1";
     const string MACRO_COMMAND_FILE_VERSION = "FileVersion 0.1";
 
@@ -98,11 +109,19 @@ public class DevConsole : MonoBehaviour
      * Instanced
      */
     
+    
 
     // Core
     bool hasConsoleBeenInitialized;
     [SerializeField] DevConsoleCache Cache;
     [SerializeField] DevConsoleStyle Style;
+    public void SetupRefsForBuild(DevConsoleCache cache, DevConsoleStyle style) {
+        Cache = cache;
+        Style = style;
+    }
+
+    
+    
     string CommandHistoryPath => Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
     string DevMacroPath => Path.Combine(Application.persistentDataPath, "DevConsole-Macros.txt");
     static readonly CommandData[] Commands = new CommandData[MAX_COMMANDS];
@@ -131,7 +150,7 @@ public class DevConsole : MonoBehaviour
     static readonly StringBuilder TextBuilder = new (256);
     static List<HistoryCommand> HistoryCommands = new (32);
     readonly InputCommand inputCommand = new ();
-    List<MacroCommand> macroCommands = new();
+    readonly List<MacroCommand> macroCommands = new();
     MacroCommand activeMacro;
     int moveMarkerToEnd;
     int selectedHint;
@@ -152,7 +171,6 @@ public class DevConsole : MonoBehaviour
 
     
     // Drawing
-    GUISkin consoleSkin;
     Vector2 consoleInputDrawPos;
     Vector2 consoleInputSize;
     float selectionBump;
@@ -160,14 +178,20 @@ public class DevConsole : MonoBehaviour
     bool hasUnparsedMacroCommands;
     static float argumentHintBump;
 
-    GUIStyle BoxBorderSkin() => consoleSkin.customStyles[0];
+    /*
+     * Add more shortcuts to make it more obvious
+     */
+    GUIStyle BoxBorderSkin() => Style.ConsoleSkin.customStyles[0];
     
     
     /*
      * Core console functionality
      */
-    
-    
+
+    void Awake() {
+        DontDestroyOnLoad(this);
+    }
+
     void InitializeConsole() {
         /*
          * TODO want to move this out of devconsole init, this should be ideally be done once in the editor when adding the package
@@ -177,21 +201,23 @@ public class DevConsole : MonoBehaviour
          */
 
 #if UNITY_EDITOR
+        if (Directory.Exists(PLUGINS_FOLDER_PATH) == false) {
+            Directory.CreateDirectory(PLUGINS_FOLDER_PATH);
+        }
+        bool shouldSaveAssets = false;
+
+        
         /*
          * Cache
          */
         Cache = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
         if (Cache == null) {
-            Debug.LogError($"Could not find {nameof(DevConsoleCache)} path! Creating new cache asset.");
-            
-            if (Directory.Exists(PLUGINS_FOLDER_PATH) == false) {
-                Directory.CreateDirectory(PLUGINS_FOLDER_PATH);
-            }
+            Debug.LogError($"Could not find {nameof(DevConsoleCache)} path! Creating new.");
             
             Cache = ScriptableObject.CreateInstance<DevConsoleCache>();
             Cache.name = nameof(DevConsoleCache);
-            UnityEditor.AssetDatabase.CreateAsset(Cache, Path.Combine(PLUGINS_FOLDER_PATH, $"{Cache.name}.asset"));
-            UnityEditor.AssetDatabase.SaveAssets();
+            UnityEditor.AssetDatabase.CreateAsset(Cache, DEV_CONSOLE_CACHE_PATH);
+            shouldSaveAssets = true;
         }
         
         
@@ -200,24 +226,29 @@ public class DevConsole : MonoBehaviour
          */
         Style = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleStyle>(DEV_CONSOLE_STYLE_PATH);
         if (Style == null) {
-            if (Directory.Exists(PLUGINS_FOLDER_PATH) == false) {
-                Directory.CreateDirectory(PLUGINS_FOLDER_PATH);
-            }
-
-            DevConsoleStyle newStyle = ScriptableObject.Instantiate(Style);
+            Debug.LogError($"Could not find {nameof(DevConsoleStyle)} path! Creating new.");
+            
+            GUISkin baseGuiSkin = Resources.Load<GUISkin>("Base_Dev Console Skin");
+            GUISkin newSkin = ScriptableObject.Instantiate(baseGuiSkin);
+            newSkin.name = "DevConsoleSkin";
+            UnityEditor.AssetDatabase.CreateAsset(newSkin, DEV_CONSOLE_SKIN_PATH);
+            
+            
+            DevConsoleStyle baseStyleAsset = Resources.Load<DevConsoleStyle>("Base_Dev Console Style");
+            DevConsoleStyle newStyle = ScriptableObject.Instantiate(baseStyleAsset);
             Style = newStyle;
             Style.name = nameof(DevConsoleStyle);
-            UnityEditor.AssetDatabase.CreateAsset(Style, Path.Combine(PLUGINS_FOLDER_PATH, $"{Style.name}.asset"));
-            UnityEditor.AssetDatabase.SaveAssets();
+            Style.ConsoleSkin = newSkin;
+            UnityEditor.AssetDatabase.CreateAsset(Style, DEV_CONSOLE_STYLE_PATH);
+            
+            shouldSaveAssets = true;
         }
         
-        /*
-         * Skin
-         * Copy skin from place if not exist
-         */
-        consoleSkin = Resources.Load<GUISkin>("Dev Console Skin");
+
+        if (shouldSaveAssets) {
+            UnityEditor.AssetDatabase.SaveAssets();
+        }
 #endif
-        
         
         
         Array.Fill(HintValue, COMMAND_TYPE);
@@ -874,9 +905,9 @@ public class DevConsole : MonoBehaviour
         float width = Screen.width;
         float height = Screen.height;
         Event inputEvent = Event.current;
-        consoleSkin.label.fontSize = (int)(Style.ConsoleTextSize - HEIGHT_SPACING);
-        consoleSkin.textField.fontSize = (int)(Style.ConsoleTextSize - HEIGHT_SPACING);
-        GUI.skin = consoleSkin;
+        Style.ConsoleSkin.label.fontSize = (int)(Style.ConsoleTextSize - HEIGHT_SPACING);
+        Style.ConsoleSkin.textField.fontSize = (int)(Style.ConsoleTextSize - HEIGHT_SPACING);
+        GUI.skin = Style.ConsoleSkin;
 
         selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectHintBumpSpeed * Time.unscaledDeltaTime);
         argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgHelpBumpSpeed * Time.unscaledDeltaTime);
@@ -1057,7 +1088,7 @@ public class DevConsole : MonoBehaviour
         if (inputCommand.commandIndex != -1) {
             Rect commandRect = new () {
                 width = Mathf.Clamp(
-                    consoleSkin.label.CalcSize(inputCommand.commandContent).x, 
+                    Style.ConsoleSkin.label.CalcSize(inputCommand.commandContent).x, 
                     0, 
                     inputFieldXmax),
                 height = inputFieldHeight,
@@ -1070,7 +1101,7 @@ public class DevConsole : MonoBehaviour
             GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.SelectedArgument;
             for (int i = 0; i < inputCommand.argumentCount; i++) {
                 Rect argRect = new (commandRect) {
-                    width = consoleSkin.label.CalcSize(inputCommand.inputArgumentName[i]).x,
+                    width = Style.ConsoleSkin.label.CalcSize(inputCommand.inputArgumentName[i]).x,
                     height = inputFieldHeight,
                     x = inputFieldPosX
                 };
@@ -1102,9 +1133,9 @@ public class DevConsole : MonoBehaviour
                 TextBuilder.Append($"({Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount]})");
                 
                 GUIContent argumentHint = new (TextBuilder.ToString());
-                Vector2 argumentHintSize = consoleSkin.label.CalcSize(argumentHint);
+                Vector2 argumentHintSize = Style.ConsoleSkin.label.CalcSize(argumentHint);
                 Rect argumentHintRect = new (inputFieldRect) {
-                    x = inputFieldRect.x + consoleSkin.textField.CalcSize(inputCommand.inputContent).x,
+                    x = inputFieldRect.x + Style.ConsoleSkin.textField.CalcSize(inputCommand.inputContent).x,
                     width = argumentHintSize.x,
                 };
                 argumentHintRect.position += new Vector2(Style.ArgHelpWidthPadding, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgHelpBumpOffsetAmount);
@@ -1136,7 +1167,7 @@ public class DevConsole : MonoBehaviour
         if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
             float maximumWidth = 0;
             float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING * 2 - Style.HintBoxHeightOffset;
-            float heightPerLine = consoleSkin.label.CalcSize(HintContent[0]).y;
+            float heightPerLine = Style.ConsoleSkin.label.CalcSize(HintContent[0]).y;
             int hintsToDraw = Mathf.Clamp(Mathf.RoundToInt(maxHintHeight / heightPerLine), 1, hintsToDisplay);
             float maximumHeight = hintsToDraw * heightPerLine;
             
@@ -1148,7 +1179,7 @@ public class DevConsole : MonoBehaviour
             hint_display_index_start = Mathf.Clamp(hint_display_index_start, 0, Mathf.Max(hintsToDisplay - hintsToDraw, 0));
             
             for (int i = 0; i < hintsToDraw; i++) {
-                Vector2 hintTextSize = consoleSkin.label.CalcSize(HintContent[hint_display_index_start + i]);
+                Vector2 hintTextSize = Style.ConsoleSkin.label.CalcSize(HintContent[hint_display_index_start + i]);
                 maximumWidth = Mathf.Clamp(Mathf.Max(hintTextSize.x, maximumWidth), 0, Screen.width - WIDTH_SPACING * 2f);
             }
             
@@ -1245,7 +1276,7 @@ public class DevConsole : MonoBehaviour
             debug.text += text;
         }
         
-        Vector2 size = consoleSkin.box.CalcSize(debug);
+        Vector2 size = Style.ConsoleSkin.box.CalcSize(debug);
         GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
 #endif
     }
