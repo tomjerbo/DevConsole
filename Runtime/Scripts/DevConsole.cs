@@ -40,6 +40,10 @@ public class DevConsole : MonoBehaviour
 {
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void SpawnConsoleInScene() {
+        if (FindAnyObjectByType<DevConsole>() != null) {
+            Debug.Log("Dev console already exists, not creating a new one!");
+            return;
+        }
         GameObject consoleContainer = new ("- Dev Console -");
         consoleContainer.AddComponent<DevConsole>();
         DontDestroyOnLoad(consoleContainer);
@@ -70,9 +74,10 @@ public class DevConsole : MonoBehaviour
      * Assets
      */
 
-    const string DEV_CONSOLE_SKIN_PATH = "Dev Console Skin";
+    const string DEV_CONSOLE_SKIN_PATH = PLUGINS_FOLDER_PATH + "DevConsoleSkin";
+    const string DEV_CONSOLE_CACHE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleCache";
+    const string DEV_CONSOLE_STYLE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleSkin";
     const string PLUGINS_FOLDER_PATH = "Assets/Plugins/DevConsole";
-    const string RESOURCES_FOLDER_PATH = "/Resources";
     const string HISTORY_COMMAND_FILE_VERSION = "FileVersion 0.1";
     const string MACRO_COMMAND_FILE_VERSION = "FileVersion 0.1";
 
@@ -96,10 +101,10 @@ public class DevConsole : MonoBehaviour
 
     // Core
     bool hasConsoleBeenInitialized;
-    static DevConsoleCache Cache;
-    static DevConsoleStyle Style;
-    static readonly string CommandHistoryPath = Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
-    static readonly string DevMacroPath = Path.Combine(Application.persistentDataPath, "DevConsole-Macros.txt");
+    [SerializeField] DevConsoleCache Cache;
+    [SerializeField] DevConsoleStyle Style;
+    string CommandHistoryPath => Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
+    string DevMacroPath => Path.Combine(Application.persistentDataPath, "DevConsole-Macros.txt");
     static readonly CommandData[] Commands = new CommandData[MAX_COMMANDS];
     static readonly int[] HintIndex = new int[MAX_HINTS];
     static readonly object[] HintValue = new object[MAX_HINTS];
@@ -164,55 +169,57 @@ public class DevConsole : MonoBehaviour
     
     
     void InitializeConsole() {
-        DevConsoleCache[] cacheObjects = Resources.FindObjectsOfTypeAll<DevConsoleCache>();
-        
         /*
          * TODO want to move this out of devconsole init, this should be ideally be done once in the editor when adding the package
          * and maybe when we're caching assets outside of playmode to avoid lagging!
+         *
+         * In editor we can load from AssetDatabase and in builds we add a console to first scene and adds a reference to cache
          */
+
 #if UNITY_EDITOR
-        if (cacheObjects == null || cacheObjects.Length == 0) {
-            string resourcesPath = Path.Join(PLUGINS_FOLDER_PATH, RESOURCES_FOLDER_PATH);
-            if (Directory.Exists(resourcesPath) == false) {
-                Directory.CreateDirectory(resourcesPath);
+        /*
+         * Cache
+         */
+        Cache = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
+        if (Cache == null) {
+            Debug.LogError($"Could not find {nameof(DevConsoleCache)} path! Creating new cache asset.");
+            
+            if (Directory.Exists(PLUGINS_FOLDER_PATH) == false) {
+                Directory.CreateDirectory(PLUGINS_FOLDER_PATH);
             }
             
             Cache = ScriptableObject.CreateInstance<DevConsoleCache>();
             Cache.name = nameof(DevConsoleCache);
-            UnityEditor.AssetDatabase.CreateAsset(Cache, Path.Combine(resourcesPath, $"{Cache.name}.asset"));
+            UnityEditor.AssetDatabase.CreateAsset(Cache, Path.Combine(PLUGINS_FOLDER_PATH, $"{Cache.name}.asset"));
             UnityEditor.AssetDatabase.SaveAssets();
         }
-#else
-            Cache = cacheObjects[0];
-#endif
-
-        DevConsoleStyle[] consoleStyles = Resources.FindObjectsOfTypeAll<DevConsoleStyle>();
-        Style = Resources.Load<DevConsoleStyle>(DevConsoleStyle.BASE_ASSET_PATH);
-#if UNITY_EDITOR
-        if (consoleStyles == null || consoleStyles.Length < 2) {
-            string resourcesPath = Path.Join(PLUGINS_FOLDER_PATH, RESOURCES_FOLDER_PATH);
-            if (Directory.Exists(resourcesPath) == false) {
-                Directory.CreateDirectory(resourcesPath);
+        
+        
+        /*
+         * Style
+         */
+        Style = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleStyle>(DEV_CONSOLE_STYLE_PATH);
+        if (Style == null) {
+            if (Directory.Exists(PLUGINS_FOLDER_PATH) == false) {
+                Directory.CreateDirectory(PLUGINS_FOLDER_PATH);
             }
 
             DevConsoleStyle newStyle = ScriptableObject.Instantiate(Style);
             Style = newStyle;
             Style.name = nameof(DevConsoleStyle);
-            UnityEditor.AssetDatabase.CreateAsset(Style, Path.Combine(resourcesPath, $"{Style.name}.asset"));
+            UnityEditor.AssetDatabase.CreateAsset(Style, Path.Combine(PLUGINS_FOLDER_PATH, $"{Style.name}.asset"));
             UnityEditor.AssetDatabase.SaveAssets();
         }
-#else
-        foreach (var styleObject in consoleStyles) {
-            if (Style == styleObject)
-                continue;
-            Style = styleObject;
-            break;
-        }
+        
+        /*
+         * Skin
+         * Copy skin from place if not exist
+         */
+        consoleSkin = Resources.Load<GUISkin>("Dev Console Skin");
 #endif
         
         
         
-        consoleSkin = Resources.Load<GUISkin>(DEV_CONSOLE_SKIN_PATH);
         Array.Fill(HintValue, COMMAND_TYPE);
         for (int i = 0; i < HintContent.Length; i++) {
             HintContent[i] = new GUIContent();

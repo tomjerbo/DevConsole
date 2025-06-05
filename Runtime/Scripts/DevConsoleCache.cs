@@ -50,7 +50,7 @@ public class DevConsoleCache : ScriptableObject
     
     [DevCommand("RebuildCache")]
     internal static void CacheAssetReferences() {
-        DevConsoleCache[] cacheObjects = Resources.FindObjectsOfTypeAll<DevConsoleCache>();
+        DevConsoleCache[] cacheObjects = Resources.LoadAll<DevConsoleCache>("");
 
         if (cacheObjects == null || cacheObjects.Length == 0) {
             Debug.Log("Failed to load DevConsoleCache!");
@@ -78,14 +78,15 @@ public class DevConsoleCache : ScriptableObject
 
 /*
  * Callback when triggering a build
+ * Breaking some builds for some reason, disabling for now
  */
 #if UNITY_EDITOR
-public class DevConsoleCacheBuildCallback : UnityEditor.Build.IPreprocessBuildWithReport {
-    public int callbackOrder => 0;
-    public void OnPreprocessBuild(UnityEditor.Build.Reporting.BuildReport report) {
-        Debug.Log("Caching from build");
-        DevConsoleCache.CacheAssetReferences();
-    }
-}
+// public class DevConsoleCacheBuildCallback : UnityEditor.Build.IPreprocessBuildWithReport {
+//     public int callbackOrder => 0;
+//     public void OnPreprocessBuild(UnityEditor.Build.Reporting.BuildReport report) {
+//         Debug.Log("Caching from build");
+//         DevConsoleCache.CacheAssetReferences();
+//     }
+// }
 #endif
 }
