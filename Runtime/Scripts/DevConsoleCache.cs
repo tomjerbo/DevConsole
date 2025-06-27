@@ -3,9 +3,11 @@ using UnityEngine;
 namespace Jerbo.DevConsole { 
 public class DevConsoleCache : ScriptableObject
 {
+    [SerializeField, Tooltip("Including folders that has editor assets can result in errors during builds!")] 
+    string[] ScriptableObjectFolder = { "Assets" };
     [SerializeField] public ScriptableObject[] AssetReferences;
     [SerializeField] public string[] AssetNames;
-    
+
     [DevCommand]
     public void PrintCache() {
         if (AssetNames == null) {
@@ -29,11 +31,6 @@ public class DevConsoleCache : ScriptableObject
 #if UNITY_EDITOR
     
     /*
-     * Editor only variables
-     */
-    static string[] SEARCH_FOLDERS = { "Assets" };
-    
-    /*
      * Different caching spots
      * enter play mode
      * builds
@@ -55,7 +52,7 @@ public class DevConsoleCache : ScriptableObject
     static void CacheAssetReferences() {
         DevConsoleCache cache = Util.LoadFirstAsset<DevConsoleCache>();
         
-        string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}", SEARCH_FOLDERS);
+        string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}", cache.ScriptableObjectFolder);
         cache.AssetReferences = new ScriptableObject[assetGuids.Length];
         cache.AssetNames = new string[assetGuids.Length];
         
