@@ -3,11 +3,14 @@
   "version": "0.3.0",
   "displayName": "DevConsole",
   "description": "A console window to run commands from.",
-  "unity": "2021.3",
+  "unity": "2022.0",
   "category": "tool",
   "author": {
     "name": "Tom Jerbo",
     "email": "tomjerbo@gmail.com",
     "url": "https://github.com/tomjerbo"
+  },
+  "dependencies": {
+    "com.jerbo.inspector": "https://github.com/tomjerbo/Inspector.git#1.0.0"
   }
 }
