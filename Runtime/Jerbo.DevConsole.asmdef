@@ -1,7 +1,9 @@
 {
     "name": "Jerbo.DevConsole",
     "rootNamespace": "Jerbo.DevConsole",
-    "references": [],
+    "references": [
+        "Jerbo.Inpector"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

@@ -1,0 +1,1 @@
+#define JERBO_DEV_CONSOLE
