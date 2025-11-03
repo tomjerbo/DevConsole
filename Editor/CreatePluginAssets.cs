@@ -1,23 +1,25 @@
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Jerbo.DevConsole {
-    
 public static class CreatePluginAssets
 {
     [UnityEditor.InitializeOnLoadMethod]
-    static void CreatePackageFolder() {
+    static async void CreatePackageFolder() {
+        
         if (System.IO.Directory.Exists(DevConsole.PLUGINS_FOLDER_PATH) == false) {
             System.IO.Directory.CreateDirectory(DevConsole.PLUGINS_FOLDER_PATH);
         }
         bool shouldSaveAssets = false;
 
+        await Task.Delay(10);
         
         /*
          * Cache
          */
         DevConsoleCache consoleCache = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleCache>(DevConsole.DEV_CONSOLE_CACHE_PATH);
         if (consoleCache == null) {
-            Debug.LogError($"Could not find {nameof(DevConsoleCache)} at path {DevConsole.DEV_CONSOLE_CACHE_PATH}! Creating new.");
+            Debug.LogError($"Could not find {nameof(DevConsoleCache)} at path '{DevConsole.DEV_CONSOLE_CACHE_PATH}'! Creating new.");
             
             consoleCache = ScriptableObject.CreateInstance<DevConsoleCache>();
             consoleCache.name = nameof(DevConsoleCache);
@@ -33,13 +35,13 @@ public static class CreatePluginAssets
             Debug.LogError($"Could not find {nameof(DevConsoleStyle)} at path '{DevConsole.DEV_CONSOLE_STYLE_PATH}'! Creating new.");
             
             GUISkin baseGuiSkin = Resources.Load<GUISkin>("Base_Dev Console Skin");
-            GUISkin newSkin = ScriptableObject.Instantiate(baseGuiSkin);
+            GUISkin newSkin = Object.Instantiate(baseGuiSkin);
             newSkin.name = "DevConsoleSkin";
             UnityEditor.AssetDatabase.CreateAsset(newSkin, DevConsole.DEV_CONSOLE_SKIN_PATH);
             
             
             DevConsoleStyle baseStyleAsset = Resources.Load<DevConsoleStyle>("Base_Dev Console Style");
-            DevConsoleStyle newStyle = ScriptableObject.Instantiate(baseStyleAsset);
+            DevConsoleStyle newStyle = Object.Instantiate(baseStyleAsset);
             consoleStyle = newStyle;
             consoleStyle.name = nameof(DevConsoleStyle);
             consoleStyle.ConsoleSkin = newSkin;
