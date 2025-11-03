@@ -9,8 +9,5 @@
     "name": "Tom Jerbo",
     "email": "tomjerbo@gmail.com",
     "url": "https://github.com/tomjerbo"
-  },
-  "dependencies": {
-    "com.jerbo.inspector": "https://github.com/tomjerbo/Inspector.git#1.0.1"
   }
 }
