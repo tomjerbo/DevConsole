@@ -2,8 +2,7 @@ using UnityEngine;
 
 namespace Jerbo.DevConsole {
     public class DevConsoleStyle : ScriptableObject {
-        public const string BASE_ASSET_PATH = "Base_Dev Console Style";
-
+            
 #if JERBO_INSPECTOR
         [Jerbo.Inspector.Tab("Core", Jerbo.Inspector.Tab.Color.Red)]
 #else
@@ -12,8 +11,7 @@ namespace Jerbo.DevConsole {
         public Texture2D ConsoleIcon;
         public Vector2Int ConsoleIconFrames;
         public float ConsolIconAnimSpeed;
-        public GUISkin ConsoleSkin; 
-            
+        public GUISkin ConsoleSkin;
         
 #if JERBO_INSPECTOR
         [Jerbo.Inspector.Tab("Console Colors", Jerbo.Inspector.Tab.Color.Pink)]

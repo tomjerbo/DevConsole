@@ -49,7 +49,7 @@ public class DevConsole : MonoBehaviour
         GameObject consoleContainer = new ("- Dev Console (Editor) -");
         DevConsole console = consoleContainer.AddComponent<DevConsole>();
         DontDestroyOnLoad(console);
-        IsActive = false;
+        IsOpen = false;
     }
 #endif
     
@@ -135,7 +135,7 @@ public class DevConsole : MonoBehaviour
     int hintsToDisplay;
     int hint_display_index_start;
     int totalCommandCount;
-
+    
     
     
     // Input
@@ -146,7 +146,8 @@ public class DevConsole : MonoBehaviour
      * use helper methods to manipulate char[] without adding memory
      */
     
-    public static bool IsActive { get; private set; }
+    
+    public static bool IsOpen { get; private set; }
     static readonly StringBuilder TextBuilder = new (256);
     static List<HistoryCommand> HistoryCommands = new (32);
     readonly InputCommand inputCommand = new ();
@@ -349,7 +350,7 @@ public class DevConsole : MonoBehaviour
     void OnDestroy() {
         SaveHistoryCommands();
         SaveMacroCommands();
-        IsActive = false;
+        IsOpen = false;
     }
     
     [DevCommand]
@@ -748,7 +749,7 @@ public class DevConsole : MonoBehaviour
     
     
     void OpenConsole() {
-        IsActive = true;
+        IsOpen = true;
         setFocus = 2;
         inputCommand.Clear();
         CommandHistoryState = History.WAIT_FOR_INPUT;
@@ -840,7 +841,7 @@ public class DevConsole : MonoBehaviour
 
     
     void CloseConsole() {
-        IsActive = false;
+        IsOpen = false;
         selectedHint = -1;
         if (activeMacro != null) {
             if (activeMacro.commands.Count > 0)
@@ -861,7 +862,7 @@ public class DevConsole : MonoBehaviour
 
     void OnGUI() {
         Event inputEvent = Event.current;
-        if (IsActive == false) {
+        if (IsOpen == false) {
             if (inputEvent.OpenConsole()) {
                 OpenConsole();
             }
@@ -1077,7 +1078,16 @@ public class DevConsole : MonoBehaviour
         iconOffset.x = WIDTH_SPACING;
         
         Rect consoleIconRect = new Rect(consoleInputDrawPos + iconOffset, iconSize);
-        GUI.DrawTexture(consoleIconRect, Style.ConsoleIcon, ScaleMode.StretchToFill, true);
+        int frameCount = Style.ConsoleIconFrames.x * Style.ConsoleIconFrames.y;
+        float frameSpeed = frameCount * Style.ConsolIconAnimSpeed;
+        int currentFrame = Mathf.FloorToInt(Time.unscaledTime * frameSpeed % frameCount);
+        int frameX = currentFrame % Style.ConsoleIconFrames.x;
+        int frameY = currentFrame / Style.ConsoleIconFrames.x;
+        float frameWidth = 1.0f / Style.ConsoleIconFrames.x;
+        float frameHeight = 1.0f / Style.ConsoleIconFrames.y;
+        
+        Rect textureCoords = new Rect(frameWidth * frameX, frameHeight * frameY, frameWidth, frameHeight);
+        GUI.DrawTextureWithTexCoords(consoleIconRect, Style.ConsoleIcon, textureCoords, true);
         
         GUI.backgroundColor = Color.clear;
         
@@ -1110,6 +1120,10 @@ public class DevConsole : MonoBehaviour
             }
         }
         
+        
+        /*
+         * Console text input
+         */
         GUI.backgroundColor = Color.clear;
         GUI.contentColor = Style.InputTextDefault;
         GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
@@ -1119,6 +1133,7 @@ public class DevConsole : MonoBehaviour
         };
         string inputText = GUI.TextField(inputFieldRect, inputCommand.inputContent.text);
         inputCommand.inputContent.text = inputText;
+        
         
         
         /*
@@ -1526,9 +1541,9 @@ public class DevConsole : MonoBehaviour
 
 
     class InputCommand {
-        internal GUIContent inputContent = new ();
-        internal GUIContent commandContent = new ();
-        internal GUIContent[] inputArgumentName = new GUIContent[12];
+        internal readonly GUIContent inputContent = new ();
+        internal readonly GUIContent commandContent = new ();
+        internal readonly GUIContent[] inputArgumentName = new GUIContent[12];
         readonly object[] inputArgumentValue = new object[12];
         internal int commandIndex;
         internal int argumentCount;
