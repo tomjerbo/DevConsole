@@ -12,7 +12,7 @@ public static class CreatePluginAssets
         }
         bool shouldSaveAssets = false;
 
-        await Task.Delay(10);
+        await Task.Delay(10); // Fixes some strange issue where it doesn't find the assets when importing the package..
         
         /*
          * Cache

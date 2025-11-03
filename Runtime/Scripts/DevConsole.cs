@@ -208,7 +208,6 @@ public class DevConsole : MonoBehaviour
         }
     }
     
-        
     void LoadStaticCommands() {
         Type[] assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
         foreach (Type loadedType in assemblyTypes) {
@@ -785,7 +784,6 @@ public class DevConsole : MonoBehaviour
             Log($"Parsing success: H->{validH}/{invalidH + validH} | M->{validM}/{invalidM + validM}");
         }
     }
-
     
     void CloseConsole() {
         IsOpen = false;
@@ -801,7 +799,6 @@ public class DevConsole : MonoBehaviour
         UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = true;
 #endif
     }
-
     
     /*
     * Main logic flow
@@ -810,7 +807,7 @@ public class DevConsole : MonoBehaviour
     void OnGUI() {
         Event inputEvent = Event.current;
         if (IsOpen == false) {
-            if (inputEvent.OpenConsole()) {
+            if (inputEvent.OpenConsole(overrideKeys:Style.openConsoleKey)) {
                 OpenConsole();
             }
             else {
@@ -996,7 +993,7 @@ public class DevConsole : MonoBehaviour
             hintsToDisplay = 0;
             selectedHint = -1;
 
-            if (activeMacro == null) {
+            if (activeMacro == null && Style.keepConsoleOpenAfterCommand == false) {
                 CloseConsole();
             }
         }

@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 
 namespace Jerbo.DevConsole {
-    public static class DevInput
+    public static class DevConsoleInput
     {
 
         public static bool KeyUp(this Event e, KeyCode key, bool useOnTrue = true) {
@@ -49,8 +49,19 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool OpenConsole(this Event e, bool useOnSuccess = true) {
+        public static bool OpenConsole(this Event e, bool useOnSuccess = true, params KeyCode[] overrideKeys) {
             if (e.isKey && e.type == EventType.KeyDown) {
+                if (overrideKeys != null) {
+                    foreach (KeyCode key in overrideKeys) {
+                        if (e.keyCode != key) continue;
+                        
+                        if (useOnSuccess) e.Use();
+                        return true;
+                    }
+
+                    return false;
+                }
+                
                 foreach (KeyCode key in OPEN_CONSOLE) {
                     if (e.keyCode != key) continue;
                     

@@ -10,8 +10,10 @@ namespace Jerbo.DevConsole {
 #endif
         public Texture2D ConsoleIcon;
         public Vector2Int ConsoleIconFrames = new (4,1);
-        public float ConsolIconAnimSpeed = 1.5f;
+        public float ConsolIconAnimSpeed = 1f;
         public GUISkin ConsoleSkin;
+        public bool keepConsoleOpenAfterCommand;
+        public KeyCode[] openConsoleKey;
         
 #if JERBO_INSPECTOR
         [Jerbo.Inspector.Tab("Console Colors", Jerbo.Inspector.Tab.Color.Pink)]
