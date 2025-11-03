@@ -33,7 +33,6 @@ using Object = UnityEngine.Object;
  */
 
 
-
 namespace Jerbo.DevConsole
 {
 public class DevConsole : MonoBehaviour
@@ -85,10 +84,10 @@ public class DevConsole : MonoBehaviour
      * Assets
      */
 
-    const string DEV_CONSOLE_SKIN_PATH = PLUGINS_FOLDER_PATH + "DevConsoleSkin.asset";
-    const string DEV_CONSOLE_CACHE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleCache.asset";
-    const string DEV_CONSOLE_STYLE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleStyle.asset";
-    const string PLUGINS_FOLDER_PATH = "Assets/Plugins/DevConsole/";
+    public const string DEV_CONSOLE_SKIN_PATH = PLUGINS_FOLDER_PATH + "DevConsoleSkin.asset";
+    public const string DEV_CONSOLE_CACHE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleCache.asset";
+    public const string DEV_CONSOLE_STYLE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleStyle.asset";
+    public const string PLUGINS_FOLDER_PATH = "Assets/Plugins/DevConsole/";
     const string HISTORY_COMMAND_FILE_VERSION = "FileVersion 0.1";
     const string MACRO_COMMAND_FILE_VERSION = "FileVersion 0.1";
 
@@ -194,63 +193,11 @@ public class DevConsole : MonoBehaviour
     }
 
     void InitializeConsole() {
-        /*
-         * TODO want to move this out of devconsole init, this should be ideally be done once in the editor when adding the package
-         * and maybe when we're caching assets outside of playmode to avoid lagging!
-         *
-         * In editor we can load from AssetDatabase and in builds we add a console to first scene and adds a reference to cache
-         */
 
 #if UNITY_EDITOR
-        if (Directory.Exists(PLUGINS_FOLDER_PATH) == false) {
-            Directory.CreateDirectory(PLUGINS_FOLDER_PATH);
-        }
-        bool shouldSaveAssets = false;
-
-        
-        /*
-         * Cache
-         */
         Cache = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
-        if (Cache == null) {
-            Debug.LogError($"Could not find {nameof(DevConsoleCache)} path! Creating new.");
-            
-            Cache = ScriptableObject.CreateInstance<DevConsoleCache>();
-            Cache.name = nameof(DevConsoleCache);
-            UnityEditor.AssetDatabase.CreateAsset(Cache, DEV_CONSOLE_CACHE_PATH);
-            shouldSaveAssets = true;
-        }
-        
-        
-        /*
-         * Style
-         */
         Style = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleStyle>(DEV_CONSOLE_STYLE_PATH);
-        if (Style == null) {
-            Debug.LogError($"Could not find {nameof(DevConsoleStyle)} path! Creating new.");
-            
-            GUISkin baseGuiSkin = Resources.Load<GUISkin>("Base_Dev Console Skin");
-            GUISkin newSkin = ScriptableObject.Instantiate(baseGuiSkin);
-            newSkin.name = "DevConsoleSkin";
-            UnityEditor.AssetDatabase.CreateAsset(newSkin, DEV_CONSOLE_SKIN_PATH);
-            
-            
-            DevConsoleStyle baseStyleAsset = Resources.Load<DevConsoleStyle>("Base_Dev Console Style");
-            DevConsoleStyle newStyle = ScriptableObject.Instantiate(baseStyleAsset);
-            Style = newStyle;
-            Style.name = nameof(DevConsoleStyle);
-            Style.ConsoleSkin = newSkin;
-            UnityEditor.AssetDatabase.CreateAsset(Style, DEV_CONSOLE_STYLE_PATH);
-            
-            shouldSaveAssets = true;
-        }
-        
-
-        if (shouldSaveAssets) {
-            UnityEditor.AssetDatabase.SaveAssets();
-        }
 #endif
-        
         
         Array.Fill(HintValue, COMMAND_TYPE);
         for (int i = 0; i < HintContent.Length; i++) {
@@ -755,7 +702,7 @@ public class DevConsole : MonoBehaviour
         CommandHistoryState = History.WAIT_FOR_INPUT;
         
 #if URP_ENABLED
-        UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = false;
+        UnityEngine.Rendering..DebugManager.instance.enableRuntimeUI = false;
 #endif
 
         if (hasConsoleBeenInitialized == false) {

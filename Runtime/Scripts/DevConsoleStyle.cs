@@ -9,8 +9,8 @@ namespace Jerbo.DevConsole {
         [Header("Core")] 
 #endif
         public Texture2D ConsoleIcon;
-        public Vector2Int ConsoleIconFrames;
-        public float ConsolIconAnimSpeed;
+        public Vector2Int ConsoleIconFrames = new (4,1);
+        public float ConsolIconAnimSpeed = 1.5f;
         public GUISkin ConsoleSkin;
         
 #if JERBO_INSPECTOR
