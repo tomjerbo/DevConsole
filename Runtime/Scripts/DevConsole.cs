@@ -190,17 +190,14 @@ public class DevConsole : MonoBehaviour
 
     void Awake() {
         DontDestroyOnLoad(this);
-    }
-
-    void InitializeConsole() {
-
+        
 #if UNITY_EDITOR
         Cache = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
         Style = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleStyle>(DEV_CONSOLE_STYLE_PATH);
-        Log($"Cache loaded status: {Cache != null} - {Cache?.name}");
-        Log($"Style loaded status: {Style != null} - {Style?.name}");
 #endif
-        
+    }
+
+    void InitializeConsole() {
         Array.Fill(HintValue, COMMAND_TYPE);
         for (int i = 0; i < HintContent.Length; i++) {
             HintContent[i] = new GUIContent();
