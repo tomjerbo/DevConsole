@@ -51,7 +51,7 @@ namespace Jerbo.DevConsole {
         
         public static bool OpenConsole(this Event e, bool useOnSuccess = true, params KeyCode[] overrideKeys) {
             if (e.isKey && e.type == EventType.KeyDown) {
-                if (overrideKeys != null) {
+                if (overrideKeys != null && overrideKeys.Length > 0) {
                     foreach (KeyCode key in overrideKeys) {
                         if (e.keyCode != key) continue;
                         

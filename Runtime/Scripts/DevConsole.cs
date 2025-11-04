@@ -197,6 +197,8 @@ public class DevConsole : MonoBehaviour
 #if UNITY_EDITOR
         Cache = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
         Style = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleStyle>(DEV_CONSOLE_STYLE_PATH);
+        Log($"Cache loaded status: {Cache != null} - {Cache?.name}");
+        Log($"Style loaded status: {Style != null} - {Style?.name}");
 #endif
         
         Array.Fill(HintValue, COMMAND_TYPE);
@@ -701,7 +703,7 @@ public class DevConsole : MonoBehaviour
         CommandHistoryState = History.WAIT_FOR_INPUT;
         
 #if URP_ENABLED
-        UnityEngine.Rendering..DebugManager.instance.enableRuntimeUI = false;
+        UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = false;
 #endif
 
         if (hasConsoleBeenInitialized == false) {
