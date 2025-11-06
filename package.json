@@ -12,6 +12,6 @@
     "url": "https://github.com/tomjerbo"
   },
     "dependencies": {
-    "com.jerbo.inspector": "https://github.com/tomjerbo/Inspector.git#1.0.0"
+    "com.jerbo.inspector": "1.0.0"
   }
 }
