@@ -5,9 +5,13 @@
   "description": "A console window to run commands from.",
   "unity": "2022.0",
   "category": "tool",
+  "licence": "MIT",
   "author": {
     "name": "Tom Jerbo",
     "email": "tomjerbo@gmail.com",
     "url": "https://github.com/tomjerbo"
+  },
+    "dependencies": {
+    "com.jerbo.inspector": "https://github.com/tomjerbo/Inspector.git#main"
   }
 }
