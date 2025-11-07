@@ -9,6 +9,10 @@ namespace Jerbo.DevConsole {
         public int callbackOrder => 0;
         
         public void OnProcessScene(Scene scene, BuildReport report) {
+            if (UnityEditor.BuildPipeline.isBuildingPlayer == false) {
+                return;
+            }
+            
             Debug.Log($"Processing -> {scene.name}, {scene.buildIndex}, {scene.path}");
             if (scene.buildIndex == 0) {
                 DevConsole[] consoles = Object.FindObjectsByType<DevConsole>(FindObjectsInactive.Include, FindObjectsSortMode.None);
