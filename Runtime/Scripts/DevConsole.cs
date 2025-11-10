@@ -806,7 +806,8 @@ public class DevConsole : MonoBehaviour
     void OnGUI() {
         Event inputEvent = Event.current;
         if (IsOpen == false) {
-            if (inputEvent.OpenConsole(overrideKeys:Style.openConsoleKey)) {
+            KeyCode[] openKeys = Style != null ? Style.openConsoleKey : Array.Empty<KeyCode>();
+            if (inputEvent.OpenConsole(overrideKeys:openKeys)) {
                 OpenConsole();
             }
             else {
