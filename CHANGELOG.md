@@ -1,3 +1,10 @@
+## [1.0.5](https://github.com/tomjerbo/DevConsole/compare/v1.0.4...v1.0.5) (2025-11-11)
+
+
+### Bug Fixes
+
+* mark cache as dirty when rebuilding ([17cb023](https://github.com/tomjerbo/DevConsole/commit/17cb02335277d9fe349a3de022091fdfd8dd57e1))
+
 ## [1.0.4](https://github.com/tomjerbo/DevConsole/compare/v1.0.3...v1.0.4) (2025-11-11)
 
 
