@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/tomjerbo/DevConsole/compare/v1.0.3...v1.0.4) (2025-11-11)
+
+
+### Bug Fixes
+
+* added my own assembly to the check ([356a18d](https://github.com/tomjerbo/DevConsole/commit/356a18d62cf011bd8de1cb6118574d6abed3c3dc))
+
 ## [1.0.3](https://github.com/tomjerbo/DevConsole/compare/v1.0.2...v1.0.3) (2025-11-11)
 
 
