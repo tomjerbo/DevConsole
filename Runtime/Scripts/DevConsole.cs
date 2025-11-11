@@ -210,9 +210,9 @@ public class DevConsole : MonoBehaviour
     void LoadStaticCommands() {
         Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
         foreach (Assembly assembly in assemblies) {
-            if (assembly.FullName.StartsWith("Assembly-CSharp", StringComparison.Ordinal)) {
+            if (assembly.FullName.StartsWith("Assembly-CSharp", StringComparison.Ordinal)
+                || assembly.FullName.StartsWith("Jerbo", StringComparison.Ordinal)) {
                 CheckAssemblyForStaticCommands(assembly);
-                break;
             }
         }
         StaticCommandCount = totalCommandCount;
