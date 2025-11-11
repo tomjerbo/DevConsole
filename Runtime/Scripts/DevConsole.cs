@@ -162,8 +162,7 @@ public class DevConsole : MonoBehaviour
         SHOW,
     }
     
-
-
+    
     class MacroCommand {
         public KeyCode key;
         public List<HistoryCommand> commands = new();
@@ -191,6 +190,7 @@ public class DevConsole : MonoBehaviour
     void Awake() {
         DontDestroyOnLoad(this);
         
+        // Cache & Style gets assigned during build step!
 #if UNITY_EDITOR
         Cache = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
         Style = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleStyle>(DEV_CONSOLE_STYLE_PATH);
@@ -208,27 +208,42 @@ public class DevConsole : MonoBehaviour
     }
     
     void LoadStaticCommands() {
-        Type[] assemblyTypes = Assembly.GetExecutingAssembly().GetTypes();
+        Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+        foreach (Assembly assembly in assemblies) {
+            if (assembly.FullName.StartsWith("Assembly-CSharp", StringComparison.Ordinal)) {
+                CheckAssemblyForStaticCommands(assembly);
+                break;
+            }
+        }
+        StaticCommandCount = totalCommandCount;
+    }
+
+    void CheckAssemblyForStaticCommands(Assembly assembly) {
+        Type[] assemblyTypes = assembly.GetTypes();
         foreach (Type loadedType in assemblyTypes) {
             MethodInfo[] methodsInType = loadedType.GetMethods(STATIC_BINDING_FLAGS);
             foreach (MethodInfo methodInfo in methodsInType) {
                 DevCommand devCommand = methodInfo.GetCustomAttribute<DevCommand>();
                 if (devCommand == null) continue;
-                
+                    
                 Commands[totalCommandCount++].AssignMethod(devCommand, methodInfo, null);
             }
-            
-            
+                
+                
             FieldInfo[] fieldsInType = loadedType.GetFields(STATIC_BINDING_FLAGS);
             foreach (FieldInfo fieldInfo in fieldsInType) {
                 DevCommand devCommand = fieldInfo.GetCustomAttribute<DevCommand>();
                 if (devCommand == null) continue;
-                
+                    
                 Commands[totalCommandCount++].AssignField(devCommand, fieldInfo, null);
             }
         }
         
-        StaticCommandCount = totalCommandCount;
+        Log($"--- <Assembly Commands ({assembly.GetName().Name}) : {totalCommandCount} > ---");
+        for (int i = 0; i < totalCommandCount; i++) {
+            Log($"Static Command: {Commands[i].displayName}");
+        }
+        Log($"--- </Assembly Commands ({assembly.GetName().Name}) > ---");
     }
     
     void LoadInstanceCommands() {
@@ -263,6 +278,12 @@ public class DevConsole : MonoBehaviour
                 }
             }
         }
+        
+        Log($"Loaded Instance Commands: {totalCommandCount-StaticCommandCount} from -> {monoBehavioursInScene.Length} components.");
+        for (int i = StaticCommandCount; i < totalCommandCount; i++) {
+            Log($"Instance Command: {Commands[i].displayName}");
+        }
+        Log("--- Instanced Commands ---");
     }
     
     bool HasFoundInstancedCommand(object commandTarget, out int index) {

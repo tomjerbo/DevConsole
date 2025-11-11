@@ -26,7 +26,7 @@ namespace Jerbo.DevConsole {
                 
                 DevConsoleCache cache = Util.LoadFirstAsset<DevConsoleCache>();
                 DevConsoleStyle style = Util.LoadFirstAsset<DevConsoleStyle>();
-                cache.RebuildCache();
+                cache.RebuildCache_Editor();
                 devConsole.SetupRefsForBuild(cache, style);
                 UnityEditor.EditorUtility.SetDirty(cache);
                 UnityEditor.AssetDatabase.SaveAssetIfDirty(cache);

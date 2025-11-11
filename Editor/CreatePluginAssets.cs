@@ -24,11 +24,12 @@ public static class CreatePluginAssets
             consoleCache = ScriptableObject.CreateInstance<DevConsoleCache>();
             consoleCache.name = nameof(DevConsoleCache);
             UnityEditor.AssetDatabase.CreateAsset(consoleCache, DevConsole.DEV_CONSOLE_CACHE_PATH);
+            consoleCache.RebuildCache_Editor();
             shouldSaveAssets = true;
         }
         
         /*
-         * Style
+         * Style & Skin
          */
         DevConsoleStyle consoleStyle = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleStyle>(DevConsole.DEV_CONSOLE_STYLE_PATH);
         if (consoleStyle == null) {

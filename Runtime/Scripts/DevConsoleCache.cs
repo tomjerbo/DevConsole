@@ -38,18 +38,20 @@ public class DevConsoleCache : ScriptableObject
     
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void OnEnterGame() {
+        return; // Disabling runtime caching to lighten load
         Debug.Log("Caching from runtime init");
-        CacheAssetReferences();
+        CacheAssetReferences_Editor();
     }
     
     
     /*
      * Caching method
-     * TODO make loading assets async!
+     * Make loading assets async!
+     * Cache commands if possible
      */
     
     [DevCommand("RebuildCache")]
-    static void CacheAssetReferences() {
+    public static void CacheAssetReferences_Editor() {
         DevConsoleCache cache = Util.LoadFirstAsset<DevConsoleCache>();
         
         string[] assetGuids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(ScriptableObject)}", cache.ScriptableObjectFolder);
@@ -66,8 +68,8 @@ public class DevConsoleCache : ScriptableObject
         Debug.Log($"DevConsole Cached -> {cache.AssetReferences.Length} ScriptableObjects");
     }
 
-    public void RebuildCache() {
-        CacheAssetReferences();
+    public void RebuildCache_Editor() {
+        CacheAssetReferences_Editor();
     }
     
 #endif

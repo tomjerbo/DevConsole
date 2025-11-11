@@ -124,11 +124,10 @@ namespace Jerbo.DevConsole {
         
         static KeyCode[] EXECUTE_COMMAND = { KeyCode.KeypadEnter, KeyCode.Return, };
         static KeyCode[] CLOSE_CONSOLE = { KeyCode.Escape, };
-        static KeyCode[] OPEN_CONSOLE = { KeyCode.F1 };
+        static KeyCode[] OPEN_CONSOLE = { KeyCode.T };
         static KeyCode[] INSERT_HINT = { KeyCode.KeypadEnter, KeyCode.Return, KeyCode.Tab };
         static KeyCode[] NAVIGATE_UP = { KeyCode.UpArrow, KeyCode.PageUp };
         static KeyCode[] NAVIGATE_DOWN = { KeyCode.DownArrow, KeyCode.PageDown };
         static KeyCode BACKSPACE = KeyCode.Backspace;
-
     }
 }

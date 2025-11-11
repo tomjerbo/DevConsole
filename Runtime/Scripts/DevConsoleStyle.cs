@@ -4,7 +4,7 @@ namespace Jerbo.DevConsole {
     
     [System.Serializable]
     public class DevConsoleStyle : ScriptableObject {
-            
+        
         [Header("Core")] 
         [SerializeField] public Texture2D ConsoleIcon;
         [SerializeField] public Vector2Int ConsoleIconFrames = new (4,1);
