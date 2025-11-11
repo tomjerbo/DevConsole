@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/tomjerbo/DevConsole/compare/v1.0.2...v1.0.3) (2025-11-11)
+
+
+### Bug Fixes
+
+* no cache on startup, fixing loading wrong assembly ([c578877](https://github.com/tomjerbo/DevConsole/commit/c57887795c0aa7d717052973b4aa6bcaa7501396))
+
 ## [1.0.2](https://github.com/tomjerbo/DevConsole/compare/v1.0.1...v1.0.2) (2025-11-11)
 
 
