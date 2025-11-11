@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/tomjerbo/DevConsole/compare/v1.0.1...v1.0.2) (2025-11-11)
+
+
+### Bug Fixes
+
+* serializing style asset ([9e6c38f](https://github.com/tomjerbo/DevConsole/commit/9e6c38f68ac4d4c298adbc332bf8b872b6329614))
+
 ## [1.0.1](https://github.com/tomjerbo/DevConsole/compare/v1.0.0...v1.0.1) (2025-11-07)
 
 

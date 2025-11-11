@@ -1,6 +1,6 @@
 {
   "name": "com.jerbo.devconsole",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "displayName": "DevConsole",
   "description": "A console window to run commands from.",
   "unity": "2022.0",
