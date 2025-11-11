@@ -66,6 +66,7 @@ public class DevConsoleCache : ScriptableObject
         }
 
         Debug.Log($"DevConsole Cached -> {cache.AssetReferences.Length} ScriptableObjects");
+        UnityEditor.EditorUtility.SetDirty(cache);
     }
 
     public void RebuildCache_Editor() {
