@@ -33,6 +33,19 @@ using Object = UnityEngine.Object;
  */
 
 
+
+/* 
+ * TODO Rework ====
+ *
+ * Custom parsing for savefiles with named values, maybe use something like json, must be tiny and without external dependencies!
+ * Treat input as string always, having to select the command/argument is very tedious, editing text is much faster to use
+ * Optional placement of having it on the top vs bottom of screen? help menu adjusted acordingly both visually and index wise with directional inputs
+ * Toast menu to show output & messages, clear command
+ *
+ * Look into using my ui system for handling navigation
+ * 
+ */
+
 namespace Jerbo.DevConsole
 {
 public class DevConsole : MonoBehaviour
@@ -134,9 +147,8 @@ public class DevConsole : MonoBehaviour
     int hintsToDisplay;
     int hint_display_index_start;
     int totalCommandCount;
-    
-    
-    
+
+
     // Input
     /*
      * Try to replace strings with textbuilder
@@ -150,7 +162,8 @@ public class DevConsole : MonoBehaviour
     static readonly StringBuilder TextBuilder = new (256);
     static List<HistoryCommand> HistoryCommands = new (32);
     readonly InputCommand inputCommand = new ();
-    readonly List<MacroCommand> macroCommands = new();
+    readonly List<MacroCommand> macroCommands = new(12);
+    static readonly List<GUIContent> ToastMessages = new(128);
     MacroCommand activeMacro;
     int moveMarkerToEnd;
     int selectedHint;
@@ -466,7 +479,8 @@ public class DevConsole : MonoBehaviour
         if (activeMacro.commands.Count > 0) {
             macroCommands.Add(activeMacro);
         }
-        Log($"Ended Macro: Key [{activeMacro.key}] -> # of Commands {activeMacro.commands.Count}.");
+
+        ToastMessages.Add(new GUIContent($"Ended Macro: Key [{activeMacro.key}] -> # of Commands {activeMacro.commands.Count}."));
         activeMacro = null;
     }
     
@@ -563,6 +577,12 @@ public class DevConsole : MonoBehaviour
             Debug.Log("------");
         }
     }
+
+    [DevCommand]
+    void Clear() {
+        ToastMessages.Clear();
+    }
+    
     
     object TryGetArgumentValue(ref string argumentString, int commandIndex, int argumentIndex) {
         
@@ -855,6 +875,7 @@ public class DevConsole : MonoBehaviour
                             inputCommand.UseHint(0);
                             if (inputCommand.CanExecuteCommand()) {
                                 inputCommand.ExecuteCommand();
+                                ToastMessages.Add(new GUIContent($"Macro '{macro.key}'"));
                                 inputCommand.Clear();
                             }
                             HistoryCommands.RemoveAt(0);
@@ -910,7 +931,7 @@ public class DevConsole : MonoBehaviour
         hintsToDisplay = ParseHints();
         if (hintsToDisplay > 1) {
             /*
-             * how do i sort the array when i have multiple that needs to follow the same index layout?
+             * how do i sort the array when i have multiple arrays that needs to follow the same index layout?
              * custom sort method?
              */
             // Array.Sort(hintContent, 0, hintsToDisplay);
@@ -994,6 +1015,7 @@ public class DevConsole : MonoBehaviour
         if (inputCommand.CanExecuteCommand() && inputEvent.ExecuteCommand()) {
             inputCommand.GenerateHistoryCommand(out HistoryCommand historyCommand);
             if (activeMacro == null) {
+                ToastMessages.Add(new GUIContent(inputCommand.CreateCompleteCommandString()));
                 inputCommand.ExecuteCommand();
             }
             else {
@@ -1002,6 +1024,7 @@ public class DevConsole : MonoBehaviour
                 }
                 else {
                     activeMacro.commands.Add(historyCommand);
+                    ToastMessages.Add(new GUIContent($"[Macro '{activeMacro.key}'] + {historyCommand.commandDisplayName}"));
                 }
             }
         
@@ -1117,6 +1140,44 @@ public class DevConsole : MonoBehaviour
         };
         string inputText = GUI.TextField(inputFieldRect, inputCommand.inputContent.text);
         inputCommand.inputContent.text = inputText;
+        
+        
+        
+        
+        
+        /*
+         * Draw Toast Messages
+         */
+
+        if (ToastMessages.Count > 0) {
+            
+            float maximumWidth = consoleInputSize.x;
+            float maxLines = consoleInputDrawPos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING * 2 - Style.HintBoxHeightOffset;
+            float heightPerLine = Style.ConsoleSkin.label.CalcSize(ToastMessages[0]).y;
+            int messagesToDraw = Mathf.Clamp(Mathf.RoundToInt(maxLines / heightPerLine), 1, ToastMessages.Count);
+            float maximumHeight = messagesToDraw * heightPerLine;
+            
+            
+            
+            Rect toastWindow = new (inputFieldRect) {
+                width = maximumWidth,
+                height = maximumHeight + Style.HintBoxBottomPadding,
+                x = consoleInputDrawPos.x,
+                y = consoleInputDrawPos.y - Style.HintBoxBottomPadding - maximumHeight - Style.HintBoxHeightOffset,
+            };
+
+            GUI.backgroundColor = Style.BackgroundColor * 0.6f;
+            GUI.Box(toastWindow, string.Empty);
+
+            GUI.contentColor = Style.HintTextColorDefault;
+            Vector2 hintStartPos = toastWindow.position;
+            for (int i = 0; i < messagesToDraw; i++) {
+                Vector2 pos = hintStartPos + new Vector2(0, maximumHeight - (i+1) * heightPerLine);
+                GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)), ToastMessages[(messagesToDraw-1)-i]);
+            }
+        }
+        
+        
         
         
         
@@ -1674,6 +1735,20 @@ public class DevConsole : MonoBehaviour
                     }
                 }
             }
+        }
+
+        internal string CreateCompleteCommandString() {
+            string fullCommandString = Commands[commandIndex].displayName;
+            for (int i = 0; i < Commands[commandIndex].parameterCount; i++) {
+                if (i < argumentCount) {
+                    fullCommandString += " " + inputArgumentValue[i];
+                }
+                else {
+                    fullCommandString += " " + Commands[commandIndex].defaultParamValue[i];
+                }
+            }
+
+            return fullCommandString;
         }
     }
     
