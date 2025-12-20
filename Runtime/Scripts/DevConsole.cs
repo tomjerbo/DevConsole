@@ -3,7 +3,7 @@
  */
 
 // #define URP_ENABLED
-// #define CONSOLE_DEBUG
+#define DEVCONSOLE_DEBUG
 
 
 using System;
@@ -53,12 +53,12 @@ public class DevConsole : MonoBehaviour
 #endif
     
     
-    [Conditional("CONSOLE_DEBUG")]
+    [Conditional("DEVCONSOLE_DEBUG")]
     void Log(object message, Object context = null) {
         Debug.Log(message.ToString(), context);
     }
 
-    [Conditional("CONSOLE_DEBUG")]
+    [Conditional("DEVCONSOLE_DEBUG")]
     void LogError(string message, Object context = null) {
         Debug.LogError(message, context);
     }
@@ -436,20 +436,38 @@ public class DevConsole : MonoBehaviour
      */
 
     [DevCommand]
-    void StartMacro(KeyCode key) {
+    void StartMacro(KeyCode key, bool writeOverShortcutKey = false) {
         if (activeMacro != null)
             return;
-        
-        foreach (MacroCommand macroCommand in macroCommands) {
+
+        for (var i = 0; i < macroCommands.Count; i++) {
+            var macroCommand = macroCommands[i];
             if (macroCommand.key == key) {
-                Debug.LogError($"DevConsole macro with key ({key}) already exists!");
-                return;
+                if (writeOverShortcutKey) {
+                    macroCommands.RemoveAt(i);
+                    break;
+                }
+                else {
+                    Debug.LogError($"DevConsole macro with key ({key}) already exists!");
+                    return;
+                }
+                    
             }
         }
-        
+
         activeMacro = new MacroCommand() {
             key = key
         };
+    }
+
+    [DevCommand]
+    void EndMacro() {
+        if (activeMacro == null) return;
+        if (activeMacro.commands.Count > 0) {
+            macroCommands.Add(activeMacro);
+        }
+        Log($"Ended Macro: Key [{activeMacro.key}] -> # of Commands {activeMacro.commands.Count}.");
+        activeMacro = null;
     }
     
     [DevCommand]
@@ -808,11 +826,7 @@ public class DevConsole : MonoBehaviour
     void CloseConsole() {
         IsOpen = false;
         selectedHint = -1;
-        if (activeMacro != null) {
-            if (activeMacro.commands.Count > 0)
-                macroCommands.Add(activeMacro);
-            activeMacro = null;
-        }
+        EndMacro();
         GUI.FocusControl(null);
         
 #if URP_ENABLED
@@ -983,7 +997,12 @@ public class DevConsole : MonoBehaviour
                 inputCommand.ExecuteCommand();
             }
             else {
-                activeMacro.commands.Add(historyCommand);
+                if (Commands[inputCommand.commandIndex].method.Name == nameof(EndMacro)) {
+                    EndMacro();
+                }
+                else {
+                    activeMacro.commands.Add(historyCommand);
+                }
             }
         
             for (int i = 0; i < HistoryCommands.Count; i++) {
@@ -1221,7 +1240,7 @@ public class DevConsole : MonoBehaviour
         
         
         
-#if CONSOLE_DEBUG
+#if DEVCONSOLE_DEBUG
         /*
          * drawdebug box
          */
