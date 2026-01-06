@@ -1585,6 +1585,61 @@ public class DevConsole : MonoBehaviour
     }
 
 
+    void ParseStringForCommand(ref string inputString, CommandData[] devCommands) {
+        /*
+         * TODO if i dont find a matching command, then it should fuzzy search for command hints
+         * 
+         * 
+         * need a good way to handle spaces
+         * do i modify inputstring?
+         *
+         * check if we have a matching command
+         * assume it's the longest match
+         * when reaching space, go to next stage
+         * 
+         */
+
+        ReadOnlySpan<char> inputText = inputString.AsSpan();
+        bool hasText = TryReadWord(ref inputText, out ReadOnlySpan<char> word);
+        int matchingCommandIndex = -1;
+        int lengtOfMatch = -1;
+        for (int i = 0; i < devCommands.Length; i++) {
+            
+        }
+
+
+
+
+
+
+
+
+    }
+
+    bool TryReadWord(ref ReadOnlySpan<char> span, out ReadOnlySpan<char> word) {
+        const char EMPTY_SPACE = ' ';
+        int i = 0;
+        while (i < span.Length && span[i] == EMPTY_SPACE) {
+            i++; // Skip junk in the start
+        }
+
+        span = span.Slice(i);
+        if (span.IsEmpty) {
+            word = default;
+            return false;
+        }
+
+        i = 0;
+        while (i < span.Length && span[i] != EMPTY_SPACE) {
+            i++;
+        }
+
+        word = span.Slice(0, i);
+        span = span.Slice(i);
+        return true;
+    }
+    
+    
     class InputCommand {
         internal readonly GUIContent inputContent = new ();
         internal readonly GUIContent commandContent = new ();
