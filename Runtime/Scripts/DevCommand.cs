@@ -7,7 +7,7 @@ namespace Jerbo.DevConsole {
         public readonly string displayName;
 
         public DevCommand(string displayName) {
-            this.displayName = displayName;
+            this.displayName = displayName.Replace(DevConsole.CHAR.SPACE, DevConsole.CHAR.EMPTY);
         }
         
         public DevCommand() {
