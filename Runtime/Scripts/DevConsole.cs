@@ -910,11 +910,13 @@ public class DevConsole : MonoBehaviour
 	
 
     console_input_state console_state = console_input_state.WAITING_FOR_INPUT;
-    
+
+    const int MAX_ARGUMENTS = 16;
     string console_input_text;
-    int[] command_argument_idx = new int[16];
+    int[] command_argument_idx = new int[MAX_ARGUMENTS];
     int command_selected_idx;
     int history_selected_idx;
+    int valid_args;
     
     
     enum console_input_state {
@@ -985,6 +987,8 @@ public class DevConsole : MonoBehaviour
 			    e.Use();
 			    // select first or last history command
 			    history_selected_idx = down ? HistoryCommands.Count - 1 : 0;
+			    
+			    // TODO add all history commands to hint list
 		    }
 	    }
 
@@ -1073,20 +1077,26 @@ public class DevConsole : MonoBehaviour
 				    console_state = console_input_state.WAITING_FOR_INPUT;
 				    console_input_text = string.Empty;
 				    command_selected_idx = -1;
+				    hintsToDisplay = 0;
 			    }
 			    else {
 				    console_state = console_input_state.COMMAND;
 					console_input_text = inputText;
-					command_selected_idx = parse_for_command(ref console_input_text, Commands, StaticCommandCount);
+					
+					string_section cmd_section = parse_string_for_section(ref console_input_text, 0);
+					command_selected_idx = parse_for_command(ref console_input_text, ref cmd_section, Commands, active_cmd_count);
+					if (command_selected_idx != -1) {
+						(int matching_args, int hints_to_display) parse_arg_result = parse_for_arguments(ref console_input_text, cmd_section.end, Commands[command_selected_idx]);
+						valid_args = parse_arg_result.matching_args;
+						if (parse_arg_result.matching_args >= Commands[command_selected_idx].num_required_args) {
+							// can be executed
+						}
+						hintsToDisplay = parse_arg_result.hints_to_display;
+					}
+					else {
+						hintsToDisplay = ParseHints();
+					}
 			    }
-		    }
-            
-
-		    if (string.IsNullOrEmpty(console_input_text)) {
-			    hintsToDisplay = 0;
-		    }
-		    else {
-			    hintsToDisplay = ParseHints();
 		    }
 		    
 	    
@@ -1192,6 +1202,7 @@ public class DevConsole : MonoBehaviour
 		           $"[State] Console state: {console_state}\n" +
 		           $"[State] Selected cmd idx: {command_selected_idx}\n" +
 		           $"[State] Selected cmd name: {(command_selected_idx != -1 ? Commands[command_selected_idx].displayName : string.Empty)}\n" +
+		           $"[State] Valid args: {valid_args}\n" +
 		           // $"[STRUCT] has cmd: {input_data.has_command()}\n" +
 		           // $"[STRUCT] cmd match idx: {input_data.idx_command}\n" +
 		           // $"[STRUCT] cmd match name: {(input_data.has_command() ? Commands[input_data.idx_command].displayName : "No match!")}\n" +
@@ -1225,13 +1236,10 @@ public class DevConsole : MonoBehaviour
 
 
 
-	    
-	    
-	    
-	    
-	    
-	    
-	    
+
+
+	    #region old stuff
+
 	    
 
 		if (false)
@@ -1544,9 +1552,9 @@ public class DevConsole : MonoBehaviour
 	    }
 
     }
+	    #endregion
 		
     }
-	
     
     
     int ParseHints() {
@@ -1961,102 +1969,279 @@ public class DevConsole : MonoBehaviour
 
 
 
-    int parse_for_command(ref string input, CommandData[] commands, int num_commands) {
-	    
-	    // find start & end of command name part
-	    int command_idx = -1;
-	    int start_idx = -1;
-	    int length = 0;
-	    for (int idx = 0; idx < input.Length; idx++) {
-		    if (start_idx == -1 && input[idx] != CHAR.SPACE) {
-			    start_idx = idx;
-				length++;
+    struct string_section {
+	    public int start_idx;
+	    public int length;
+	    public int end => start_idx + length;
+	    public bool found_start => length != 0;
+    }
+
+
+    string_section parse_string_for_section(ref string input_string, int start_idx) {
+	    string_section section = new (); 
+
+	    // TODO can be clearer
+	    for (int idx = start_idx; idx < input_string.Length; idx++) {
+		    if (section.found_start == false && input_string[idx] != CHAR.SPACE) {
+			    section.start_idx = idx;
+			    section.length++;
 		    }
-			else if (start_idx != -1) {
-				if (input[idx] == CHAR.SPACE) {
-					break;
-				}
-
-				length++;
-			}
-	    }
-
-	    for (int idx = 0; idx < num_commands; idx++) {
-		    if (commands[idx].displayName.Length != length) {
-			    continue;
-		    }
-
-		    bool found_match = true;
-		    for (int char_idx = 0; char_idx < length; char_idx++) {
-			    if (input[start_idx + char_idx] != commands[idx].displayName[char_idx]) {
-				    found_match = false;
+		    else if (section.found_start) {
+			    if (input_string[idx] == CHAR.SPACE) {
 				    break;
 			    }
-		    }
 
-		    if (found_match) {
-				command_idx = idx;
-				break;
+			    section.length++;
+		    }
+	    }
+
+	    return section;
+    }
+
+    string_section[] parse_string_for_remaining_sections(ref string input_string, int start_idx) {
+
+	    int next_idx = start_idx;
+	    int section_count = count_sections_in_string(ref input_string, start_idx);
+	    string_section[] sections = new string_section[section_count];
+	    
+	    for (int idx = 0; idx < section_count; idx++) {
+		    sections[idx] = parse_string_for_section(ref input_string, next_idx);
+		    next_idx = sections[idx].end;
+	    }
+
+	    return sections;
+    }
+
+
+    int count_sections_in_string(ref string input_string, int start_idx) {
+	    int count = 0;
+	    int next_idx = start_idx;
+
+	    while (next_idx < input_string.Length) {
+			string_section section = new ();
+			
+	    	for (int idx = next_idx; idx < input_string.Length; idx++) {
+			    if (section.found_start == false && input_string[idx] != CHAR.SPACE) {
+				    section.start_idx = idx;
+				    section.length++;
+			    }
+			    else if (section.found_start) {
+				    if (input_string[idx] == CHAR.SPACE) {
+					    break;
+				    }
+			
+				    section.length++;
+			    }
+	    	}
+
+		    if (section.found_start) {
+				next_idx = section.end;
+				count++;
+		    }
+	    }
+
+	    return count;
+    }
+    
+    
+    // TODO can make methods that gets start & length of cmd/arg string
+    int parse_for_command(ref string input, ref string_section section, CommandData[] commands, int num_commands) {
+	    int command_idx = -1;
+	    
+	    for (int idx = 0; idx < num_commands; idx++) {
+		    if (commands[idx].displayName.Length != section.length) {
+			    continue;
+		    }
+		    
+		    if (string.Compare(input, section.start_idx, commands[idx].displayName, 0, section.length, StringComparison.OrdinalIgnoreCase) == 0) {
+			    command_idx = idx;
+			    break;
 		    }
 	    }
 
 	    return command_idx;
     }
     
-    int ParseStringForCommand(ref ReadOnlySpan<char> inputString, CommandData[] devCommands, int commandCount) {
-        /*
-         * TODO if i dont find a matching command, then it should fuzzy search for command hints
-         * ONLY parsing for command in this method, arguments are handled afterwards
-         * commands are not allowed to have spaces in them!
-         * 
-         * need a good way to handle spaces
-         * do i modify inputstring?
-         *
-         * check if we have a matching command
-         * assume it's the longest match
-         * when reaching space, go to next stage
-         * 
-         */
-        
-        bool hasText = TryReadWord(ref inputString, out ReadOnlySpan<char> commandName);
-        if (hasText == false) {
-            return -1;
-        }
-        
-        int matchingCommandIndex = -1;
-        int lengthOfMatch = -1;
-        for (int i = 0; i < commandCount; i++) {
-            int cmdLength = devCommands[i].displayName.Length;
-            if (lengthOfMatch < cmdLength && commandName.StartsWith(devCommands[i].displayName, StringComparison.OrdinalIgnoreCase)) {
-                lengthOfMatch = cmdLength;
-                matchingCommandIndex = i;
-            }
-        }
+    /*
+     * figure out if we have valid cmd with args or if we should display hints for current arg type
+     */
+    
+    (int matching_args, int hints_to_display) parse_for_arguments(ref string input, int start_idx, CommandData command) {
+	    /*
+	     * if we find valid matches for all args in command, ignore rest of string
+	     */
+	    int hints_to_display = 0;
+	    int valid_args_found = 0;
+	    int next_idx = start_idx;
+	    
+	    for (int arg_idx = 0; arg_idx < command.parameterCount; arg_idx++) {
+		    (bool valid_arg, int next_idx_or_num_hints) parsed_hint_result = parse_hints_for_arg_type(ref input, next_idx, command.parameterTypes[arg_idx]); 
+		    if (parsed_hint_result.valid_arg) {
+				next_idx = parsed_hint_result.next_idx_or_num_hints;
+				valid_args_found++;
+		    }
+		    else {
+			    hints_to_display = parsed_hint_result.next_idx_or_num_hints;
+			    break;
+		    }
+	    }
 
-        return matchingCommandIndex;
+	    return (valid_args_found, hints_to_display);
     }
     
-    // Finds range of next word and slices it into word
-    bool TryReadWord(ref ReadOnlySpan<char> span, out ReadOnlySpan<char> word) {
-        int i = 0;
-        while (i < span.Length && span[i] == CHAR.SPACE) {
-            i++; // Skip junk in the start
-        }
+    (bool valid_arg, int next_idx_or_num_hints) parse_hints_for_arg_type(ref string input, int start_idx, Type arg_type) {
+	    int next_idx_or_num_hints = -1;
+	    bool valid_arg = false;
 
-        span = span[i..];
-        if (span.IsEmpty) {
-            word = default;
-            return false;
-        }
+	    int length_of_input_left = input.Length - start_idx;
+	    
+	    
+	    if (arg_type == typeof(bool)) {
+		    string_section next_section = parse_string_for_section(ref input, start_idx);
+		    if (next_section.length == bool.TrueString.Length) {
+			    if (string.Compare(input, next_section.start_idx, bool.TrueString, 0, next_section.length, StringComparison.OrdinalIgnoreCase) == 0) {
+				    next_idx_or_num_hints = next_section.end;
+				    valid_arg = true;
+			    }
+		    }
+		    else if (next_section.length == bool.FalseString.Length) {
+			    if (string.Compare(input, next_section.start_idx, bool.FalseString, 0, next_section.length, StringComparison.OrdinalIgnoreCase) == 0) {
+				    next_idx_or_num_hints = next_section.end;
+				    valid_arg = true;
+			    }
+		    }
+		    else {
+			    // hints
+			    string_section[] remaining_sections = parse_string_for_remaining_sections(ref input, start_idx);
+			    bool has_true = false;
+			    bool has_false = false;
+			    for (int idx = 0; idx < remaining_sections.Length; idx++) {
 
-        i = 0;
-        while (i < span.Length && span[i] != CHAR.SPACE) {
-            i++;
-        }
-        
-        word = span[..i];
-        span = span[i..];
-        return true;
+				    if (has_true == false) {
+						HintContent[next_idx_or_num_hints].text = bool.TrueString;
+						HintValue[next_idx_or_num_hints] = true;
+						has_true = true;
+						next_idx_or_num_hints++;
+				    }
+
+				    if (has_false == false) {
+					    HintContent[next_idx_or_num_hints].text = bool.FalseString;
+					    HintValue[next_idx_or_num_hints] = false;
+					    has_false = true;
+					    next_idx_or_num_hints++;
+				    }
+
+				    if (next_idx_or_num_hints == 2) {
+					    break;
+				    }
+				    
+			    }
+		    }
+	    }
+	    else if (arg_type.IsEnum) {
+		    
+		    
+		    // check if valid arg
+		    string[] enum_names = arg_type.GetEnumNames();
+		    int length_of_match = -1;
+		    int idx_best_match = -1;
+		    
+		    // longest match if any
+		    for (int idx = 0; idx < enum_names.Length; idx++) {
+			    if (enum_names[idx].Length > length_of_input_left || length_of_match > enum_names[idx].Length) {
+				    continue;
+			    }
+
+			    if (string.Compare(input, start_idx, enum_names[idx], 0, enum_names[idx].Length, StringComparison.OrdinalIgnoreCase) == 0) {
+				    length_of_match = enum_names[idx].Length;
+				    idx_best_match = idx;
+			    }
+		    }
+
+		    // is valid
+		    if (idx_best_match != -1) {
+			    valid_arg = true;
+			    next_idx_or_num_hints = start_idx + length_of_match;
+		    }
+		    else {
+				// not valid arg, get hints instead
+				string_section[] remaining_sections = parse_string_for_remaining_sections(ref input, start_idx);
+			    Array enum_values = arg_type.GetEnumValues();
+
+			    
+			    // enum on the outside so that i can break & not worry about adding same value twice from fuzzy searching
+				for (int enum_idx = 0; enum_idx < enum_names.Length; enum_idx++) 
+				{
+					for (int section_idx = 0; section_idx < remaining_sections.Length; section_idx++) 
+					{
+						if (remaining_sections[section_idx].length > enum_names[enum_idx].Length) {
+						    continue;
+					    }
+
+					    // TODO non allocating way of checking contains?
+					    if (enum_names[enum_idx].Contains(input[remaining_sections[section_idx].end..], StringComparison.OrdinalIgnoreCase)) {
+						    HintContent[next_idx_or_num_hints].text = enum_names[enum_idx];
+						    HintValue[next_idx_or_num_hints] = enum_values.GetValue(enum_idx);
+						    next_idx_or_num_hints++;
+						    break;
+					    }
+					    
+				    }
+					
+			    }
+		    }
+	    }
+    
+
+
+
+	    return (valid_arg, next_idx_or_num_hints);
+    }
+    
+    
+
+    int parse_string_for_arg_of_type(ref string input, int start_idx, Type arg_type) {
+	    return 0;
+	    
+	    //     
+	    //     /*
+	    //      * ScriptableObjects
+	    //      */
+	    //
+	    //     if (TYPE_SO.IsAssignableFrom(parameter_type)) {
+	    //         for (int i = 0; i < Cache.AssetReferences.Length; i++) {
+	    //             ScriptableObject asset = Cache.AssetReferences[i];
+	    //             if (parameter_type.IsAssignableFrom(asset.GetType()) == false) continue;
+	    //             
+	    //             if (string.Equals(argument_string, asset.name, StringComparison.OrdinalIgnoreCase)) {
+	    //                 return asset;
+	    //             }
+	    //         }
+	    //
+	    //         return false;
+	    //     }
+	    //     
+	    //
+	    //     
+	    //     /*
+	    //      * try parse string to argument type and display "Apply Value" hint if its valid, and always select the hint
+	    //      */
+	    //     
+	    //     TypeConverter typeConverter = TypeDescriptor.GetConverter(parameter_type);
+	    //     if (typeConverter.CanConvertFrom(typeof(string))) {
+	    //         object stringToValue = null;
+	    //         try {
+	    //             stringToValue = typeConverter.ConvertFromString(argument_string);
+	    //         }
+	    //         catch {
+	    //             // ignored
+	    //         }
+	    //
+	    //         return false;
+	    //         // return stringToValue;
+	    //     }
+
+
     }
     
     
@@ -2238,6 +2423,7 @@ public class DevConsole : MonoBehaviour
         public object[] defaultParamValue;
         public int parameterCount;
         public CommandType commandType;
+        public int num_required_args;
         public enum CommandType {
             METHOD,
             FIELD,
@@ -2272,6 +2458,9 @@ public class DevConsole : MonoBehaviour
                 parameterNames[i] = param.Name;
                 parameterHasDefault[i] = param.HasDefaultValue;
                 defaultParamValue[i] = param.DefaultValue;
+                if (param.HasDefaultValue == false) {
+	                num_required_args++;
+                }
             }
 
             hintText = TextBuilder.ToString();
