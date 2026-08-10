@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Jerbo.DevConsole {
     public static class Util {
@@ -19,6 +21,23 @@ namespace Jerbo.DevConsole {
             
             return asset;
         }
+        
+        public static T[] LoadAllOfType<T>() where T : Object {
+            string[] assetGuids = UnityEditor.AssetDatabase.FindAssets( $"t:{typeof(T)}", new[] { "Assets/" } );
+            if (assetGuids == null || assetGuids.Length == 0) {
+                Debug.LogError($"Could not find any assets of type {typeof(T)}!");
+                return Array.Empty<T>();
+            }
+
+            T[] assets = new T[assetGuids.Length];
+            for (int idx = 0; idx < assetGuids.Length; idx++) {
+                string assetPath = UnityEditor.AssetDatabase.GUIDToAssetPath(assetGuids[idx]);
+                assets[idx] = UnityEditor.AssetDatabase.LoadAssetAtPath<T>(assetPath);
+            }
+
+            return assets;
+        }
+        
 #endif
     }
 }

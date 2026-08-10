@@ -14,6 +14,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Events;
 using Debug = UnityEngine.Debug;
@@ -763,6 +764,9 @@ public class DevConsole : MonoBehaviour
         setFocus = 2;
         inputCommand.Clear();
         CommandHistoryState = History.WAIT_FOR_INPUT;
+        Event.current.Use();
+
+        Cache.AssetReferences = Util.LoadAllOfType<ScriptableObject>();
         
 #if URP_ENABLED
         UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = false;
@@ -2038,6 +2042,9 @@ public class DevConsole : MonoBehaviour
 				next_idx = section.end;
 				count++;
 		    }
+		    else {
+			    break;
+		    }
 	    }
 
 	    return count;
@@ -2090,56 +2097,81 @@ public class DevConsole : MonoBehaviour
     }
     
     (bool valid_arg, int next_idx_or_num_hints) parse_hints_for_arg_type(ref string input, int start_idx, Type arg_type) {
-	    int next_idx_or_num_hints = -1;
+	    int next_idx_or_num_hints = 0;
 	    bool valid_arg = false;
 
 	    int length_of_input_left = input.Length - start_idx;
+		string_section[] remaining_segments = parse_string_for_remaining_sections(ref input, start_idx);
 	    
+		/*
+		 * possible value must match with all remaining segments to be a valid hint 
+		 */
+		
+		
+		/*
+		 * TODO #### BOOL ####
+		 */
 	    
 	    if (arg_type == typeof(bool)) {
-		    string_section next_section = parse_string_for_section(ref input, start_idx);
-		    if (next_section.length == bool.TrueString.Length) {
-			    if (string.Compare(input, next_section.start_idx, bool.TrueString, 0, next_section.length, StringComparison.OrdinalIgnoreCase) == 0) {
-				    next_idx_or_num_hints = next_section.end;
+		    
+		    if (remaining_segments.Length == 0) {
+			    HintContent[next_idx_or_num_hints].text = bool.TrueString;
+			    HintValue[next_idx_or_num_hints++]      = true;
+				    
+			    HintContent[next_idx_or_num_hints].text = bool.FalseString;
+			    HintValue[next_idx_or_num_hints++]      = false;
+		    }
+		    else if (remaining_segments[0].length == bool.TrueString.Length) {
+			    if (string.Compare(input, remaining_segments[0].start_idx, bool.TrueString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0) {
+				    next_idx_or_num_hints = remaining_segments[0].end;
 				    valid_arg = true;
 			    }
 		    }
-		    else if (next_section.length == bool.FalseString.Length) {
-			    if (string.Compare(input, next_section.start_idx, bool.FalseString, 0, next_section.length, StringComparison.OrdinalIgnoreCase) == 0) {
-				    next_idx_or_num_hints = next_section.end;
+		    else if (remaining_segments[0].length == bool.FalseString.Length) {
+			    if (string.Compare(input, remaining_segments[0].start_idx, bool.FalseString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0) {
+				    next_idx_or_num_hints = remaining_segments[0].end;
 				    valid_arg = true;
 			    }
 		    }
 		    else {
-			    // hints
-			    string_section[] remaining_sections = parse_string_for_remaining_sections(ref input, start_idx);
-			    bool has_true = false;
-			    bool has_false = false;
-			    for (int idx = 0; idx < remaining_sections.Length; idx++) {
-
-				    if (has_true == false) {
-						HintContent[next_idx_or_num_hints].text = bool.TrueString;
-						HintValue[next_idx_or_num_hints] = true;
-						has_true = true;
-						next_idx_or_num_hints++;
+				// hints
+			    bool show_hint_true = true;
+			    bool show_hint_false = true;
+			    
+			    
+			    for (int idx = 0; idx < remaining_segments.Length; idx++) {
+				    ReadOnlySpan<char> segment = input.AsSpan(remaining_segments[idx].start_idx, remaining_segments[idx].length);
+				    
+				    if (show_hint_true && bool.TrueString.AsSpan().Contains(segment, StringComparison.OrdinalIgnoreCase) == false) {
+						show_hint_true = false;
 				    }
-
-				    if (has_false == false) {
-					    HintContent[next_idx_or_num_hints].text = bool.FalseString;
-					    HintValue[next_idx_or_num_hints] = false;
-					    has_false = true;
-					    next_idx_or_num_hints++;
+				
+				    if (show_hint_false && bool.FalseString.AsSpan().Contains(segment, StringComparison.OrdinalIgnoreCase) == false) {
+					    show_hint_false = false;
 				    }
-
-				    if (next_idx_or_num_hints == 2) {
+				
+				    if (show_hint_false == false && show_hint_true == false) {
 					    break;
 				    }
-				    
+			    }
+
+			    if (show_hint_true) {
+				    HintContent[next_idx_or_num_hints].text = bool.TrueString;
+				    HintValue[next_idx_or_num_hints++]      = true;
+			    }
+
+			    if (show_hint_false) {
+				    HintContent[next_idx_or_num_hints].text = bool.FalseString;
+				    HintValue[next_idx_or_num_hints++]      = false;
 			    }
 		    }
 	    }
+	    
+	    
+	    /*
+	     * TODO #### ENUM ####
+	     */
 	    else if (arg_type.IsEnum) {
-		    
 		    
 		    // check if valid arg
 		    string[] enum_names = arg_type.GetEnumNames();
@@ -2158,42 +2190,120 @@ public class DevConsole : MonoBehaviour
 			    }
 		    }
 
-		    // is valid
+		    // is valid enum arg
 		    if (idx_best_match != -1) {
 			    valid_arg = true;
 			    next_idx_or_num_hints = start_idx + length_of_match;
 		    }
 		    else {
-				// not valid arg, get hints instead
-				string_section[] remaining_sections = parse_string_for_remaining_sections(ref input, start_idx);
-			    Array enum_values = arg_type.GetEnumValues();
-
 			    
-			    // enum on the outside so that i can break & not worry about adding same value twice from fuzzy searching
-				for (int enum_idx = 0; enum_idx < enum_names.Length; enum_idx++) 
-				{
-					for (int section_idx = 0; section_idx < remaining_sections.Length; section_idx++) 
-					{
-						if (remaining_sections[section_idx].length > enum_names[enum_idx].Length) {
-						    continue;
-					    }
-
-					    // TODO non allocating way of checking contains?
-					    if (enum_names[enum_idx].Contains(input[remaining_sections[section_idx].end..], StringComparison.OrdinalIgnoreCase)) {
-						    HintContent[next_idx_or_num_hints].text = enum_names[enum_idx];
-						    HintValue[next_idx_or_num_hints] = enum_values.GetValue(enum_idx);
-						    next_idx_or_num_hints++;
+			    // not valid arg, get hints instead
+			    Array enum_values = arg_type.GetEnumValues();
+			    
+			    for (int enum_idx = 0; enum_idx < enum_names.Length; enum_idx++) { 
+				    bool display_as_hint = true;
+				    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
+					    if (remaining_segments[section_idx].length > enum_names[enum_idx].Length) {
+						    display_as_hint = false;
 						    break;
 					    }
-					    
+
+					    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
+					    if (enum_names[enum_idx].AsSpan().Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
+						    display_as_hint = false;
+						    break;
+					    }
 				    }
+				    
+				    if (display_as_hint) {
+					    HintContent[next_idx_or_num_hints].text = enum_names[enum_idx];
+					    HintValue[next_idx_or_num_hints++] = enum_values.GetValue(enum_idx);
+				    }
+				}
+		    }
+	    }
+	    
+	    
+	    /*
+	     * TODO #### SCRIPTABLE OBJECTS ####
+	     */
+
+	    
+	    else if (TYPE_SO.IsAssignableFrom(arg_type)) {
+
+
+		    int length_of_match = -1;
+		    int idx_best_match = -1;
+		    if (remaining_segments.Length > 0) {
+		    	ReadOnlySpan<char> first_segment = input.AsSpan(remaining_segments[0].start_idx, remaining_segments[0].length);
+		    	for (int idx = 0; idx < Cache.AssetReferences.Length; idx++) {
+					ScriptableObject asset = Cache.AssetReferences[idx];
+					if (arg_type.IsAssignableFrom(asset.GetType()) == false || asset.name.Length < length_of_match) {
+						continue;
+					}
 					
+					
+					if (first_segment.CompareTo(asset.name.AsSpan(), StringComparison.OrdinalIgnoreCase) == 0) {
+						length_of_match = asset.name.Length;
+						idx_best_match = idx;
+					}
+				}
+		    }
+		    
+		    if (idx_best_match != -1) {
+			    valid_arg = true;
+			    next_idx_or_num_hints = start_idx + length_of_match;
+		    }
+		    else {
+			    
+			    for (int asset_idx = 0; asset_idx < Cache.AssetReferences.Length; asset_idx++) {
+				    ScriptableObject asset = Cache.AssetReferences[asset_idx];
+				    if (arg_type.IsAssignableFrom(asset.GetType()) == false) {
+					    continue;
+				    }
+
+				    bool display_as_hint = true;
+				    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
+					    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
+				    	if (asset.name.AsSpan().Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
+						    display_as_hint = false;
+						    break;
+					    }
+				    }
+
+				    if (display_as_hint) {
+					    HintContent[next_idx_or_num_hints].text = asset.name;
+					    HintValue[next_idx_or_num_hints++] = asset;
+				    }
+			    }
+			    
+		    }
+	    }
+	    
+	    
+	    
+	    /*
+	     * TODO #### NUNMBERS AND OTHER ####
+	     */
+
+	    else {
+		    TypeConverter type_converter = TypeDescriptor.GetConverter(arg_type);
+		    if (type_converter.CanConvertFrom(typeof(string))) {
+			    object string_to_value = null;
+			    try {
+				    string_to_value = type_converter.ConvertFromString(input[start_idx..]);
+			    }
+			    finally {
+			    	if (string_to_value != null) {
+						valid_arg = true;
+						next_idx_or_num_hints = input.Length;
+					}
 			    }
 		    }
 	    }
-    
-
-
+	    
+	    
+	    
 
 	    return (valid_arg, next_idx_or_num_hints);
     }
