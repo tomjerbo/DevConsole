@@ -43,7 +43,10 @@ using Object = UnityEngine.Object;
  * Toast menu to show output & messages, clear command
  * scrolling through history commands should replace input text field to it's quick to select+use, maybe same for hints?
  * Look into using my ui system for handling navigation
- * 
+ *
+ *
+ *
+ * have toggle for displaying arguments in hint view, when in command mode
  */
 
 namespace Jerbo.DevConsole
@@ -142,13 +145,14 @@ public class DevConsole : MonoBehaviour
     static readonly int[] HintIndex = new int[MAX_HINTS];
     static readonly object[] HintValue = new object[MAX_HINTS];
     static readonly GUIContent[] HintContent = new GUIContent[MAX_HINTS];
-    static readonly Type SO_TYPE = typeof(ScriptableObject);
-    static readonly Type COMMAND_TYPE = typeof(CommandData);
+    static readonly Type TYPE_SO = typeof(ScriptableObject);
+    static readonly Type TYPE_COMMAND_DATA = typeof(CommandData);
     static History CommandHistoryState;
     static int StaticCommandCount;
     int hintsToDisplay;
     int hint_display_index_start;
     int active_cmd_count;
+    int selected_command_idx = -1;
 
 
     // Input
@@ -176,7 +180,7 @@ public class DevConsole : MonoBehaviour
         WAIT_FOR_INPUT,
         SHOW,
     }
-    
+
     
     class MacroCommand {
         public KeyCode key;
@@ -213,7 +217,7 @@ public class DevConsole : MonoBehaviour
     }
 
     void InitializeConsole() {
-        Array.Fill(HintValue, COMMAND_TYPE);
+        Array.Fill(HintValue, TYPE_COMMAND_DATA);
         for (int i = 0; i < HintContent.Length; i++) {
             HintContent[i] = new GUIContent();
         }
@@ -625,7 +629,7 @@ public class DevConsole : MonoBehaviour
          * ScriptableObjects
          */
 
-        if (SO_TYPE.IsAssignableFrom(argumentType)) {
+        if (TYPE_SO.IsAssignableFrom(argumentType)) {
             for (int i = 0; i < Cache.AssetReferences.Length; i++) {
                 ScriptableObject asset = Cache.AssetReferences[i];
                 if (argumentType.IsAssignableFrom(asset.GetType()) == false) continue;
@@ -905,23 +909,18 @@ public class DevConsole : MonoBehaviour
 
 	
 
-    static string console_input_text;
-
-    console_input_state console_state = console_input_state.writing;
-    input_command_data input_data;
-    struct input_command_data {
-	    public string input_text;
-	    public int[] idx_argument;
-	    public int idx_command;
-
-	    public bool has_command() {
-		    return idx_command != -1;
-	    }
-    }
-
+    console_input_state console_state = console_input_state.WAITING_FOR_INPUT;
+    
+    string console_input_text;
+    int[] command_argument_idx = new int[16];
+    int command_selected_idx;
+    int history_selected_idx;
+    
+    
     enum console_input_state {
-	    writing,
-	    history,
+	    WAITING_FOR_INPUT,
+	    HISTORY,
+	    COMMAND,
     }
 
     void draw_console_window() {
@@ -935,7 +934,7 @@ public class DevConsole : MonoBehaviour
 	    selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectHintBumpSpeed * Time.unscaledDeltaTime);
 	    argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgHelpBumpSpeed * Time.unscaledDeltaTime);
 	    bool windowHasFocus = GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID;
-
+	    
 
 
 
@@ -964,19 +963,44 @@ public class DevConsole : MonoBehaviour
 	     */
 
 
+	    
+	    
+	    
+	    /*
+	     * decide what state we're in for the console input
+	     */
 
+	    
 
-	    if (console_state == console_input_state.writing) {
-		    // Reset
-		    input_data = new input_command_data {
-			    input_text = console_input_text
-		    };
-
-		    try_find_command_match(ref input_data);
-		    if (input_data.has_command()) {
-			    // try_match_arguments(ref input_data);
+	    /*
+	     * if user tries to navigate up or down, intention is to scroll through history
+	     * enter history state and start displaying history with first history selected
+	     */
+	    if (console_state == console_input_state.WAITING_FOR_INPUT) {
+		    Event e = Event.current;
+		    bool up = e.NavigateUp(false);
+		    bool down = e.NavigateUp(false);
+		    if (up || down) {
+			    console_state = console_input_state.HISTORY;
+			    e.Use();
+			    // select first or last history command
+			    history_selected_idx = down ? HistoryCommands.Count - 1 : 0;
 		    }
 	    }
+
+	    
+	    
+	    // if (console_state == console_input_state.COMMAND) {
+		   //  // Reset
+		   //  console_input_text = string.Empty;
+	    //
+		   //  try_find_command_match(ref input_data);
+		   //  if (input_data.has_command()) {
+			  //   if (Commands[input_data.idx_command].parameterCount > 0) {
+				 //    try_match_arguments(ref input_data);
+			  //   }
+		   //  }
+	    // }
 	    
 
 
@@ -1002,16 +1026,16 @@ public class DevConsole : MonoBehaviour
 
 
 	    // Parse input string for command
-	    ReadOnlySpan<char> consoleInputSpan = console_input_text.AsSpan();
-	    int matchingCommandIndex = ParseStringForCommand(ref consoleInputSpan, Commands, active_cmd_count);
-	    bool hasValidCommand = matchingCommandIndex != -1;
-	    bool hasAllArguments = hasValidCommand && Commands[matchingCommandIndex].parameterCount == 0;
-	    if (hasValidCommand && hasAllArguments) {
-		    // Find arguments
-		    // ParseStringForArgument()
-		    // inputCommand.commandIndex = matchingCommandIndex;
-
-	    }
+	    // ReadOnlySpan<char> consoleInputSpan = console_input_text.AsSpan();
+	    // int matchingCommandIndex = ParseStringForCommand(ref consoleInputSpan, Commands, active_cmd_count);
+	    // bool hasValidCommand = matchingCommandIndex != -1;
+	    // bool hasAllArguments = hasValidCommand && Commands[matchingCommandIndex].parameterCount == 0;
+	    // if (hasValidCommand && hasAllArguments) {
+		   //  // Find arguments
+		   //  // ParseStringForArgument()
+		   //  // inputCommand.commandIndex = matchingCommandIndex;
+	    //
+	    // }
 
 	    
 	    
@@ -1040,9 +1064,115 @@ public class DevConsole : MonoBehaviour
 			    width = consoleInputBackground.xMax - 12,
 		    };
 		    string inputText = GUI.TextField(inputFieldRect, console_input_text);
-		    console_input_text = inputText;
 		    
+		    // TODO only focus when opening?
+			GUI.FocusControl(CONSOLE_INPUT_FIELD_ID);
+		    
+		    if (console_input_text != inputText) {
+			    if (inputText.Length == 0) {
+				    console_state = console_input_state.WAITING_FOR_INPUT;
+				    console_input_text = string.Empty;
+				    command_selected_idx = -1;
+			    }
+			    else {
+				    console_state = console_input_state.COMMAND;
+					console_input_text = inputText;
+					command_selected_idx = parse_for_command(ref console_input_text, Commands, StaticCommandCount);
+			    }
+		    }
+            
+
+		    if (string.IsNullOrEmpty(console_input_text)) {
+			    hintsToDisplay = 0;
+		    }
+		    else {
+			    hintsToDisplay = ParseHints();
+		    }
+		    
+	    
+	    
+	    
+	    /*
+	     * DrawHintBox
+	     *
+	     * extract this into method that takes in current selected index, array of things to display
+	     */
+
+	    if (hintsToDisplay > 0) {
+		    float maximumWidth = 0;
+		    float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING * 2 - Style.HintBoxHeightOffset;
+		    float heightPerLine = Style.ConsoleSkin.label.CalcSize(HintContent[0]).y;
+		    int hintsToDraw = Mathf.Clamp(Mathf.RoundToInt(maxHintHeight / heightPerLine), 1, hintsToDisplay);
+		    float maximumHeight = hintsToDraw * heightPerLine;
+
+		    if (selectedHint < hint_display_index_start) {
+			    hint_display_index_start = selectedHint;
+		    }
+		    else if (selectedHint >= hint_display_index_start + hintsToDraw) {
+			    hint_display_index_start = selectedHint - hintsToDraw + 1;
+		    }
+
+		    hint_display_index_start = Mathf.Clamp(hint_display_index_start, 0, Mathf.Max(hintsToDisplay - hintsToDraw, 0));
+
+		    for (int i = 0; i < hintsToDraw; i++) {
+			    Vector2 hintTextSize = Style.ConsoleSkin.label.CalcSize(HintContent[hint_display_index_start + i]);
+			    maximumWidth = Mathf.Clamp(Mathf.Max(hintTextSize.x, maximumWidth), 0,
+				    Screen.width - WIDTH_SPACING * 2f);
+		    }
+
+
+		    Rect hintBackground = new (inputFieldRect) {
+			    width = maximumWidth,
+			    height = maximumHeight + Style.HintBoxBottomPadding,
+			    y = consoleInputDrawPos.y - Style.HintBoxBottomPadding - maximumHeight - Style.HintBoxHeightOffset,
+		    };
+
+		    GUI.backgroundColor = Style.BackgroundColor;
+		    GUI.Box(hintBackground, string.Empty);
+		    GUI.Box(hintBackground, string.Empty, BoxBorderSkin());
+
+		    Vector2 hintStartPos = hintBackground.position;
+		    for (int i = 0; i < hintsToDraw; i++) {
+			    bool isSelected = (hint_display_index_start + i) == selectedHint;
+
+			    float offsetDst = isSelected
+				    ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount
+				    : 0;
+			    Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i + 1) * heightPerLine);
+
+			    GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
+
+			    if (CommandHistoryState == History.SHOW) {
+				    if (HistoryCommands[hint_display_index_start + i].historyCommandState != 2) {
+					    GUI.enabled = false;
+				    }
+			    }
+
+			    GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)),
+				    HintContent[hint_display_index_start + i]);
+
+			    if (GUI.enabled == false) {
+				    GUI.enabled = true;
+			    }
+		    }
 	    }
+	    else {
+		    selectedHint = -1;
+	    }
+	    
+	    
+	    }
+
+	    
+	    
+	    
+	    
+	    
+	    
+	    
+	    
+	    
+	    
 	    
 
 #if DEVCONSOLE_DEBUG
@@ -1057,13 +1187,16 @@ public class DevConsole : MonoBehaviour
 		           $"Command Index: {inputCommand.commandIndex}\n" +
 		           // $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}\n" +
 		           // $"CommandHistoryState: {CommandHistoryState}\n" + 
-		           $"HistoryCount: {HistoryCommands.Count}\n" +
+		           // $"HistoryCount: {HistoryCommands.Count}\n" +
 		           $"[STRUCT] input text: {console_input_text}\n" +
-		           $"[STRUCT] has cmd: {input_data.has_command()}\n" +
-		           $"[STRUCT] cmd match idx: {input_data.idx_command}\n" +
-		           $"[STRUCT] cmd match name: {(input_data.has_command() ? Commands[input_data.idx_command].displayName : "No match!")}\n" +
-		           $"[SPAN] cmd match idx: {matchingCommandIndex}\n" +
-		           $"[SPAN] cmd match name: {(matchingCommandIndex != -1 ? Commands[matchingCommandIndex].displayName : "No match!")}\n" +
+		           $"[State] Console state: {console_state}\n" +
+		           $"[State] Selected cmd idx: {command_selected_idx}\n" +
+		           $"[State] Selected cmd name: {(command_selected_idx != -1 ? Commands[command_selected_idx].displayName : string.Empty)}\n" +
+		           // $"[STRUCT] has cmd: {input_data.has_command()}\n" +
+		           // $"[STRUCT] cmd match idx: {input_data.idx_command}\n" +
+		           // $"[STRUCT] cmd match name: {(input_data.has_command() ? Commands[input_data.idx_command].displayName : "No match!")}\n" +
+		           // $"[SPAN] cmd match idx: {matchingCommandIndex}\n" +
+		           // $"[SPAN] cmd match name: {(matchingCommandIndex != -1 ? Commands[matchingCommandIndex].displayName : "No match!")}\n" +
 		           // $"Hints to draw: {hintsToDraw}\n" + 
 		           // $"Height of hints: {maximumHeight}\n" +
 		           // $"History Index: "
@@ -1092,6 +1225,14 @@ public class DevConsole : MonoBehaviour
 
 
 
+	    
+	    
+	    
+	    
+	    
+	    
+	    
+	    
 
 		if (false)
 	    {
@@ -1386,76 +1527,6 @@ public class DevConsole : MonoBehaviour
 		    }
 	    }
 
-
-	    /*
-	     * DrawHintBox
-	     */
-
-	    if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
-		    float maximumWidth = 0;
-		    float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING * 2 -
-		                          Style.HintBoxHeightOffset;
-		    float heightPerLine = Style.ConsoleSkin.label.CalcSize(HintContent[0]).y;
-		    int hintsToDraw = Mathf.Clamp(Mathf.RoundToInt(maxHintHeight / heightPerLine), 1, hintsToDisplay);
-		    float maximumHeight = hintsToDraw * heightPerLine;
-
-		    if (selectedHint < hint_display_index_start) {
-			    hint_display_index_start = selectedHint;
-		    }
-		    else if (selectedHint >= hint_display_index_start + hintsToDraw) {
-			    hint_display_index_start = selectedHint - hintsToDraw + 1;
-		    }
-
-		    hint_display_index_start =
-			    Mathf.Clamp(hint_display_index_start, 0, Mathf.Max(hintsToDisplay - hintsToDraw, 0));
-
-		    for (int i = 0; i < hintsToDraw; i++) {
-			    Vector2 hintTextSize = Style.ConsoleSkin.label.CalcSize(HintContent[hint_display_index_start + i]);
-			    maximumWidth = Mathf.Clamp(Mathf.Max(hintTextSize.x, maximumWidth), 0,
-				    Screen.width - WIDTH_SPACING * 2f);
-		    }
-
-
-		    Rect hintBackground = new (inputFieldRect) {
-			    width = maximumWidth,
-			    height = maximumHeight + Style.HintBoxBottomPadding,
-			    y = consoleInputDrawPos.y - Style.HintBoxBottomPadding - maximumHeight - Style.HintBoxHeightOffset,
-		    };
-
-		    GUI.backgroundColor = Style.BackgroundColor;
-		    GUI.Box(hintBackground, string.Empty);
-		    GUI.Box(hintBackground, string.Empty, BoxBorderSkin());
-
-		    Vector2 hintStartPos = hintBackground.position;
-		    for (int i = 0; i < hintsToDraw; i++) {
-			    bool isSelected = (hint_display_index_start + i) == selectedHint;
-
-			    float offsetDst = isSelected
-				    ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount
-				    : 0;
-			    Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i + 1) * heightPerLine);
-
-			    GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
-
-			    if (CommandHistoryState == History.SHOW) {
-				    if (HistoryCommands[hint_display_index_start + i].historyCommandState != 2) {
-					    GUI.enabled = false;
-				    }
-			    }
-
-			    GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)),
-				    HintContent[hint_display_index_start + i]);
-
-			    if (GUI.enabled == false) {
-				    GUI.enabled = true;
-			    }
-		    }
-	    }
-	    else {
-		    selectedHint = -1;
-	    }
-
-
 	    /*
 	     * Set focus back to input field
 	     */
@@ -1473,474 +1544,34 @@ public class DevConsole : MonoBehaviour
 	    }
 
     }
-
-
-
+		
     }
+	
     
-    void DrawConsole() {
-        float width = Screen.width;
-        float height = Screen.height;
-        Event inputEvent = Event.current;
-        Style.ConsoleSkin.label.fontSize = (int)(Style.ConsoleTextSize - HEIGHT_SPACING);
-        Style.ConsoleSkin.textField.fontSize = (int)(Style.ConsoleTextSize - HEIGHT_SPACING);
-        GUI.skin = Style.ConsoleSkin;
-
-        selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectHintBumpSpeed * Time.unscaledDeltaTime);
-        argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgHelpBumpSpeed * Time.unscaledDeltaTime);
-        bool windowHasFocus = GUI.GetNameOfFocusedControl() == CONSOLE_INPUT_FIELD_ID;
-
-        /*
-         * Hint menu navigation
-         * don't actually have to apply the input here, only need to capture it before textfields eats it
-         * can also generate hints after input field to get the most up to date one
-         *
-         * Input -> Execute Command 
-         * Input -> Hints & Navigation
-         * Draw -> Console Field
-         * If Changed -> Generate hints
-         * Draw -> Hints
-         * Input -> Execute navigation
-         */
-
-        
-        hintsToDisplay = ParseHints();
-        if (hintsToDisplay > 1) {
-            /*
-             * how do i sort the array when i have multiple arrays that needs to follow the same index layout?
-             * custom sort method?
-             */
-            // Array.Sort(hintContent, 0, hintsToDisplay);
-        }
-
-        if (inputCommand.commandIndex == -1 && inputCommand.HasText() == false) {
-            if (CommandHistoryState == History.HIDE) 
-                CommandHistoryState = History.WAIT_FOR_INPUT;
-        }
-        else {
-            CommandHistoryState = History.HIDE;
-        }
-        
-
-        if (windowHasFocus) {
-            if (selectedHint != -1) {
-                if (inputEvent.InsertHint()) {
-                    if (CommandHistoryState == History.SHOW && HistoryCommands[HintIndex[selectedHint]].historyCommandState != 2) {
-                        selectionBump = 0;
-                    }
-                    else {
-                        inputCommand.UseHint(selectedHint);
-                        CommandHistoryState = History.HIDE;
-                        moveMarkerToEnd = 2;
-                        selectedHint = -1;    
-                    }
-                }
-            }
-
-
-            if (inputCommand.HasText() == false && inputEvent.Backspace()) {
-                if (inputCommand.argumentCount > 0) {
-                    --inputCommand.argumentCount;
-                    if (inputEvent.control == false) {
-                        inputCommand.inputContent.text = inputCommand.inputArgumentName[inputCommand.argumentCount].text;
-                    }
-                    moveMarkerToEnd = 2;
-                    argumentHintBump = 0;
-                    selectedHint = 0;
-                }
-                else if (inputCommand.commandIndex != -1) {
-                    if (inputEvent.control == false) {
-                        inputCommand.inputContent.text = inputCommand.commandContent.text;
-                    }
-                    inputCommand.commandIndex = -1;
-                    moveMarkerToEnd = 2;
-                    argumentHintBump = 0;
-                }
-            }
-
-
-            if (inputEvent.NavigateDown()) {
-                selectedHint -= 1;
-                selectionBump = 0;
-                if (CommandHistoryState == History.WAIT_FOR_INPUT) {
-                    CommandHistoryState = History.SHOW;
-                }
-
-                if (selectedHint < -1) selectedHint = hintsToDisplay - 1;
-            }
-            else if (inputEvent.NavigateUp()) {
-                selectedHint += 1;
-                selectionBump = 0;
-                if (CommandHistoryState == History.WAIT_FOR_INPUT) {
-                    CommandHistoryState = History.SHOW;
-                }
-
-                if (selectedHint >= hintsToDisplay) {
-                    selectedHint = -1;
-                }
-            }
-
-            selectedHint = Mathf.Clamp(selectedHint, -1, hintsToDisplay - 1);
-        }
-
-
-        /*
-         * should creating a macro run the command? probably not
-         * 
-         */
-        if (inputCommand.CanExecuteCommand() && inputEvent.ExecuteCommand()) {
-            inputCommand.GenerateHistoryCommand(out HistoryCommand historyCommand);
-            if (activeMacro == null) {
-                ToastMessages.Add(new GUIContent(inputCommand.CreateCompleteCommandString()));
-                inputCommand.ExecuteCommand();
-            }
-            else {
-                if (Commands[inputCommand.commandIndex].method.Name == nameof(EndMacro)) {
-                    EndMacro();
-                }
-                else {
-                    activeMacro.commands.Add(historyCommand);
-                    ToastMessages.Add(new GUIContent($"[Macro '{activeMacro.key}'] + {historyCommand.commandDisplayName}"));
-                }
-            }
-        
-            for (int i = 0; i < HistoryCommands.Count; i++) {
-                if (historyCommand.commandIndex != HistoryCommands[i].commandIndex) continue;
-                if (historyCommand.argumentValues.Length != HistoryCommands[i].argumentValues.Length) continue;
-                bool hasSameArguments = true;
-                for (int k = 0; k < historyCommand.argumentValues.Length; k++) {
-                    if (historyCommand.argumentValues[k] != HistoryCommands[i].argumentValues[k]) {
-                        hasSameArguments = false;
-                        break;
-                    }
-                }
-            
-                if (hasSameArguments) {
-                    HistoryCommands.RemoveAt(i);
-                    break;
-                }
-            }
-            
-            HistoryCommands.Insert(0, historyCommand);
-            if (HistoryCommands.Count > 32) {
-                HistoryCommands.RemoveAt(HistoryCommands.Count - 1);
-            }
-
-            inputCommand.Clear();
-            CommandHistoryState = History.WAIT_FOR_INPUT;
-            moveMarkerToEnd = 2;
-            hintsToDisplay = 0;
-            selectedHint = -1;
-
-            if (activeMacro == null && Style.keepConsoleOpenAfterCommand == false) {
-                CloseConsole();
-            }
-        }
-        
-
-        
-        /*
-         * draw console input area
-         */
-
-        consoleInputDrawPos = new Vector2(WIDTH_SPACING, height - (HEIGHT_SPACING * 2f + Style.ConsoleTextSize));
-        consoleInputSize = new Vector2(width - WIDTH_SPACING * 2f, Style.ConsoleTextSize);
-        
-        Rect consoleInputBackground = new(consoleInputDrawPos, consoleInputSize);
-        GUI.backgroundColor = activeMacro == null ? Style.BackgroundColor : Style.RecordMacroColor;
-        GUI.Box(consoleInputBackground, string.Empty, BoxBorderSkin());
-        GUI.backgroundColor = Style.BackgroundColor;
-        GUI.Box(consoleInputBackground, string.Empty);
-        
-        
-        /*
-         * icon
-         */
-        Vector2 iconSize = Vector2.one * Style.ConsoleIconSize;
-        Vector2 iconOffset = (Style.ConsoleTextSize - Style.ConsoleIconSize) * 0.5f * Vector2.one;
-        iconOffset.x = WIDTH_SPACING;
-        
-        Rect consoleIconRect = new Rect(consoleInputDrawPos + iconOffset, iconSize);
-        int frameCount = Style.ConsoleIconFrames.x * Style.ConsoleIconFrames.y;
-        float frameSpeed = frameCount * Style.ConsolIconAnimSpeed;
-        int currentFrame = Mathf.FloorToInt(Time.unscaledTime * frameSpeed % frameCount);
-        int frameX = currentFrame % Style.ConsoleIconFrames.x;
-        int frameY = currentFrame / Style.ConsoleIconFrames.x;
-        float frameWidth = 1.0f / Style.ConsoleIconFrames.x;
-        float frameHeight = 1.0f / Style.ConsoleIconFrames.y;
-        
-        Rect textureCoords = new Rect(frameWidth * frameX, frameHeight * frameY, frameWidth, frameHeight);
-        GUI.DrawTextureWithTexCoords(consoleIconRect, Style.ConsoleIcon, textureCoords, true);
-        
-        GUI.backgroundColor = Color.clear;
-        
-        float inputFieldPosX = consoleInputBackground.x + consoleIconRect.width + WIDTH_SPACING;
-        float inputFieldXmax = consoleInputBackground.xMax - consoleIconRect.width;
-        float inputFieldHeight = consoleInputBackground.height;
-        
-        if (inputCommand.commandIndex != -1) {
-            Rect commandRect = new () {
-                width = Mathf.Clamp(
-                    Style.ConsoleSkin.label.CalcSize(inputCommand.commandContent).x, 
-                    0, 
-                    inputFieldXmax),
-                height = inputFieldHeight,
-                position = new Vector2(inputFieldPosX, consoleInputDrawPos.y)
-            };
-            GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.SelectedCommand;
-            GUI.Label(commandRect, inputCommand.commandContent);
-            inputFieldPosX = commandRect.xMax - WIDTH_SPACING;
-            
-            GUI.contentColor = inputCommand.CanExecuteCommand() ? Style.ValidCommand : Style.SelectedArgument;
-            for (int i = 0; i < inputCommand.argumentCount; i++) {
-                Rect argRect = new (commandRect) {
-                    width = Style.ConsoleSkin.label.CalcSize(inputCommand.inputArgumentName[i]).x,
-                    height = inputFieldHeight,
-                    x = inputFieldPosX
-                };
-                GUI.Label(argRect, inputCommand.inputArgumentName[i]);
-                inputFieldPosX = argRect.xMax - WIDTH_SPACING;
-            }
-        }
-        
-        
-        /*
-         * Draw Console text input
-         */
-        GUI.backgroundColor = Color.clear;
-        GUI.contentColor = Style.InputTextDefault;
-        GUI.SetNextControlName(CONSOLE_INPUT_FIELD_ID);
-        Rect inputFieldRect = new (consoleInputBackground) {
-            x = inputFieldPosX,
-            width = consoleInputBackground.xMax - inputFieldPosX,
-        };
-        string inputText = GUI.TextField(inputFieldRect, inputCommand.inputContent.text);
-        inputCommand.inputContent.text = inputText;
-        
-        
-        
-        
-        
-        /*
-         * Draw Toast Messages
-         */
-
-        if (ToastMessages.Count > 0) {
-            
-            float maximumWidth = consoleInputSize.x;
-            float maxLines = consoleInputDrawPos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING * 2 - Style.HintBoxHeightOffset;
-            float heightPerLine = Style.ConsoleSkin.label.CalcSize(ToastMessages[0]).y;
-            int messagesToDraw = Mathf.Clamp(Mathf.RoundToInt(maxLines / heightPerLine), 1, ToastMessages.Count);
-            float maximumHeight = messagesToDraw * heightPerLine;
-            
-            
-            
-            Rect toastWindow = new (inputFieldRect) {
-                width = maximumWidth,
-                height = maximumHeight + Style.HintBoxBottomPadding,
-                x = consoleInputDrawPos.x,
-                y = consoleInputDrawPos.y - Style.HintBoxBottomPadding - maximumHeight - Style.HintBoxHeightOffset,
-            };
-
-            GUI.backgroundColor = Style.BackgroundColor * 0.6f;
-            GUI.Box(toastWindow, string.Empty);
-
-            GUI.contentColor = Style.HintTextColorDefault;
-            Vector2 hintStartPos = toastWindow.position;
-            for (int i = 0; i < messagesToDraw; i++) {
-                Vector2 pos = hintStartPos + new Vector2(0, maximumHeight - (i+1) * heightPerLine);
-                GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)), ToastMessages[(messagesToDraw-1)-i]);
-            }
-        }
-        
-        
-        
-        
-        
-        /*
-         * Draw argument hint box
-         */
-        if (inputCommand.commandIndex != -1) {
-            if (inputCommand.argumentCount < Commands[inputCommand.commandIndex].parameterCount) {
-                TextBuilder.Clear();
-                const string COLOR_END_TAG = "</color>";
-                string colorTag = $"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>";
-                // int nameLenght = Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount].Length;
-                TextBuilder.Append($"({Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount]})");
-                
-                GUIContent argumentHint = new (TextBuilder.ToString());
-                Vector2 argumentHintSize = Style.ConsoleSkin.label.CalcSize(argumentHint);
-                Rect argumentHintRect = new (inputFieldRect) {
-                    x = inputFieldRect.x + Style.ConsoleSkin.textField.CalcSize(inputCommand.inputContent).x,
-                    width = argumentHintSize.x,
-                };
-                argumentHintRect.position += new Vector2(Style.ArgHelpWidthPadding, Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgHelpBumpOffsetAmount);
-
-                // Middle
-                // TextBuilder.Insert(nameLenght + 4, COLOR_END_TAG);
-                // TextBuilder.Insert(nameLenght + 3, colorTag);
-                
-                // Start
-                TextBuilder.Insert(1, COLOR_END_TAG);
-                TextBuilder.Insert(0, colorTag);
-                
-                // End
-                TextBuilder.Insert(TextBuilder.Length-1, colorTag);
-                TextBuilder.Append(COLOR_END_TAG);
-
-
-                GUI.contentColor = Style.InputArgumentType;
-                argumentHint.text = TextBuilder.ToString();
-                GUI.Label(argumentHintRect, argumentHint);
-            }
-        }
-        
-        
-        /*
-         * DrawHintBox
-         */
-
-        if (hintsToDisplay > 0 && CommandHistoryState != History.WAIT_FOR_INPUT) {
-            float maximumWidth = 0;
-            float maxHintHeight = consoleInputDrawPos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING * 2 - Style.HintBoxHeightOffset;
-            float heightPerLine = Style.ConsoleSkin.label.CalcSize(HintContent[0]).y;
-            int hintsToDraw = Mathf.Clamp(Mathf.RoundToInt(maxHintHeight / heightPerLine), 1, hintsToDisplay);
-            float maximumHeight = hintsToDraw * heightPerLine;
-            
-            if (selectedHint < hint_display_index_start) {
-                hint_display_index_start = selectedHint;
-            } else if (selectedHint >= hint_display_index_start + hintsToDraw) {
-                hint_display_index_start = selectedHint - hintsToDraw + 1;
-            }
-            hint_display_index_start = Mathf.Clamp(hint_display_index_start, 0, Mathf.Max(hintsToDisplay - hintsToDraw, 0));
-            
-            for (int i = 0; i < hintsToDraw; i++) {
-                Vector2 hintTextSize = Style.ConsoleSkin.label.CalcSize(HintContent[hint_display_index_start + i]);
-                maximumWidth = Mathf.Clamp(Mathf.Max(hintTextSize.x, maximumWidth), 0, Screen.width - WIDTH_SPACING * 2f);
-            }
-            
-            
-            Rect hintBackground = new (inputFieldRect) {
-                width = maximumWidth,
-                height = maximumHeight + Style.HintBoxBottomPadding,
-                y = consoleInputDrawPos.y - Style.HintBoxBottomPadding - maximumHeight - Style.HintBoxHeightOffset,
-            };
-
-            GUI.backgroundColor = Style.BackgroundColor;
-            GUI.Box(hintBackground, string.Empty);
-            GUI.Box(hintBackground, string.Empty, BoxBorderSkin());
-            
-            Vector2 hintStartPos = hintBackground.position;
-            for (int i = 0; i < hintsToDraw; i++) {
-                bool isSelected = (hint_display_index_start + i) == selectedHint;
-                
-                float offsetDst = isSelected ? Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount : 0;
-                Vector2 pos = hintStartPos + new Vector2(offsetDst, maximumHeight - (i+1) * heightPerLine);
-                
-                GUI.contentColor = isSelected ? Style.HintTextColorSelected : Style.HintTextColorDefault;
-
-                if (CommandHistoryState == History.SHOW) {
-                    if (HistoryCommands[hint_display_index_start + i].historyCommandState != 2) {
-                        GUI.enabled = false;
-                    }
-                }
-                GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)), HintContent[hint_display_index_start + i]);
-                
-                if (GUI.enabled == false) {
-                    GUI.enabled = true;
-                }
-            }
-        }
-        else {
-            selectedHint = -1;
-        }
-        
-        
-        /*
-         * Set focus back to input field
-         */
-        
-        if (setFocus > 0) {
-            --setFocus;
-            GUI.FocusControl(CONSOLE_INPUT_FIELD_ID);
-            inputCommand.Clear();
-        }
-        
-        if (moveMarkerToEnd > 0) {
-            --moveMarkerToEnd;
-            TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
-            text.MoveTextEnd();
-        }
-        
-        
-        
-        
-        
-        
-#if DEVCONSOLE_DEBUG
-        /*
-         * drawdebug box
-         */
-        GUI.backgroundColor = Style.BackgroundColor;
-        GUI.contentColor = Style.InputTextDefault;
-        GUI.enabled = true;
-        GUIContent debug = new () {
-            text = $"Selected Hint Index: {selectedHint}\n" +
-                   $"Command Index: {inputCommand.commandIndex}\n" +
-                   // $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}\n" +
-                   // $"CommandHistoryState: {CommandHistoryState}\n" + 
-                   $"HistoryCount: {HistoryCommands.Count}\n" +
-                   // $"Hints to draw: {hintsToDraw}\n" + 
-                   // $"Height of hints: {maximumHeight}\n" +
-                   // $"History Index: "
-                   
-                   // $"\n" +
-                   "",
-        };
-
-        if (CommandHistoryState == History.SHOW && selectedHint != -1) {
-            HistoryCommand cmd = HistoryCommands[selectedHint];
-            string text = $"-- History command #{selectedHint} --\n";
-            text += $"commandIndex: {cmd.commandIndex}\n";
-            text += $"historyState: {cmd.historyCommandState}\n";
-            text += $"displayString: {cmd.displayString}\n";
-            text += $"displayName: {cmd.commandDisplayName}\n";
-            foreach (var str in cmd.argumentDisplayName) {
-                text += $"arg: {str}\n";
-            }
-
-            debug.text += text;
-        }
-        
-        Vector2 size = Style.ConsoleSkin.box.CalcSize(debug);
-        GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
-#endif
-    }
-
-
+    
     int ParseHints() {
         int hintsFound = 0;
         
         /*
          * Command history hints
          */
-        if (CommandHistoryState != History.HIDE) {
-            for (int i = 0; i < HistoryCommands.Count; i++) {
-                if (hintsFound == MAX_HINTS) break;
-
-                HintContent[hintsFound].text = HistoryCommands[i].displayString;
-                HintIndex[hintsFound] = i;
-                hintsFound++;
-            }
-
-            return hintsFound;
-        }
+        // if (CommandHistoryState != History.HIDE) {
+        //     for (int i = 0; i < HistoryCommands.Count; i++) {
+        //         if (hintsFound == MAX_HINTS) break;
+        //
+        //         HintContent[hintsFound].text = HistoryCommands[i].displayString;
+        //         HintIndex[hintsFound] = i;
+        //         hintsFound++;
+        //     }
+        //
+        //     return hintsFound;
+        // }
         
         
         // TODO wanna add sorting based on how many matches we have, best result at the top
         // Fill with commands that match
-        if (inputCommand.commandIndex == -1) {
-            string[] inputWords = inputCommand.inputContent.text.Split(CHAR.SPACE, StringSplitOptions.RemoveEmptyEntries);
+        if (selected_command_idx == -1) {
+            string[] inputWords = console_input_text.Split(CHAR.SPACE, StringSplitOptions.RemoveEmptyEntries);
            
             for (int i = 0; i < active_cmd_count; i++) {
                 if (hintsFound == MAX_HINTS) break;
@@ -2043,7 +1674,7 @@ public class DevConsole : MonoBehaviour
          * ScriptableObjects
          */
 
-        if (SO_TYPE.IsAssignableFrom(argumentType)) {
+        if (TYPE_SO.IsAssignableFrom(argumentType)) {
             for (int i = 0; i < Cache.AssetReferences.Length; i++) {
                 if (hintsFound == MAX_HINTS) break;
 
@@ -2161,42 +1792,43 @@ public class DevConsole : MonoBehaviour
         return hintsFound;
     }
     
-    void try_find_command_match(ref input_command_data input_data) {
-	    input_data.idx_command = -1;
-	    if (string.IsNullOrEmpty(input_data.input_text)) {
-		    return;
-	    }
-	    
-	    int idx_longest_match = -1;
-	    int cmd_match_length = -1;
-	    for (int i = 0; i < active_cmd_count; i++) {
-		    int cmd_name_length = Commands[i].displayName.Length;
-		    if (cmd_match_length < cmd_name_length && input_data.input_text.StartsWith(Commands[i].displayName, StringComparison.OrdinalIgnoreCase)) {
-			    cmd_match_length = cmd_name_length;
-			    idx_longest_match = i;
-		    }
-	    }
-
-	    input_data.idx_command = idx_longest_match;
-    }
-
-    int try_match_arguments(ref input_command_data input_data) {
-	    string string_of_arguments = input_data.input_text.Remove(0, Commands[input_data.idx_command].displayName.Length).Trim(CHAR.SPACE);
-	    if (string.IsNullOrEmpty(string_of_arguments)) {
-		    return 0;
-	    }
-
-	    int idx_arg = 0;
-	    CommandData target_command = Commands[input_data.idx_command];
-	    for (int idx = 0; idx < target_command.parameterCount; idx++) {
-		    bool found_match = false;
-		    Type parameter_type = target_command.parameterTypes[idx];
-		    
-		    
-	    }
-
-	    return -1;
-    }
+    // void try_find_command_match(ref input_command_data input_data) {
+	   //  input_data.idx_command = -1;
+	   //  if (string.IsNullOrEmpty(input_data.input_text)) {
+		  //   return;
+	   //  }
+	   //  
+	   //  int idx_longest_match = -1;
+	   //  int cmd_match_length = -1;
+	   //  for (int i = 0; i < active_cmd_count; i++) {
+		  //   int cmd_name_length = Commands[i].displayName.Length;
+		  //   if (cmd_match_length < cmd_name_length && input_data.input_text.StartsWith(Commands[i].displayName, StringComparison.OrdinalIgnoreCase)) {
+			 //    cmd_match_length = cmd_name_length;
+			 //    idx_longest_match = i;
+		  //   }
+	   //  }
+    //
+	   //  input_data.idx_command = idx_longest_match;
+    // }
+    //
+    // int try_match_arguments(ref input_command_data input_data) {
+	   //  string string_of_arguments = input_data.input_text.Remove(0, Commands[input_data.idx_command].displayName.Length).Trim(CHAR.SPACE);
+	   //  if (string.IsNullOrEmpty(string_of_arguments)) {
+		  //   return 0;
+	   //  }
+    //
+	   //  int idx_arg = 0;
+	   //  CommandData target_command = Commands[input_data.idx_command];
+	   //  for (int idx = 0; idx < target_command.parameterCount; idx++) {
+		  //   bool found_match = false;
+		  //   Type parameter_type = target_command.parameterTypes[idx];
+		  //   if (has_valid_argument(ref string_of_arguments, parameter_type) == false) {
+			 //    return idx;
+		  //   }
+	   //  }
+    //
+	   //  return -1;
+    // }
 
 
     bool has_valid_argument(ref string argument_string, Type parameter_type) {
@@ -2249,7 +1881,7 @@ public class DevConsole : MonoBehaviour
 	         * ScriptableObjects
 	         */
 
-	        if (SO_TYPE.IsAssignableFrom(parameter_type)) {
+	        if (TYPE_SO.IsAssignableFrom(parameter_type)) {
 	            for (int i = 0; i < Cache.AssetReferences.Length; i++) {
 	                ScriptableObject asset = Cache.AssetReferences[i];
 	                if (parameter_type.IsAssignableFrom(asset.GetType()) == false) continue;
@@ -2326,8 +1958,50 @@ public class DevConsole : MonoBehaviour
 
 	        return false;
     }
-    
-	
+
+
+
+    int parse_for_command(ref string input, CommandData[] commands, int num_commands) {
+	    
+	    // find start & end of command name part
+	    int command_idx = -1;
+	    int start_idx = -1;
+	    int length = 0;
+	    for (int idx = 0; idx < input.Length; idx++) {
+		    if (start_idx == -1 && input[idx] != CHAR.SPACE) {
+			    start_idx = idx;
+				length++;
+		    }
+			else if (start_idx != -1) {
+				if (input[idx] == CHAR.SPACE) {
+					break;
+				}
+
+				length++;
+			}
+	    }
+
+	    for (int idx = 0; idx < num_commands; idx++) {
+		    if (commands[idx].displayName.Length != length) {
+			    continue;
+		    }
+
+		    bool found_match = true;
+		    for (int char_idx = 0; char_idx < length; char_idx++) {
+			    if (input[start_idx + char_idx] != commands[idx].displayName[char_idx]) {
+				    found_match = false;
+				    break;
+			    }
+		    }
+
+		    if (found_match) {
+				command_idx = idx;
+				break;
+		    }
+	    }
+
+	    return command_idx;
+    }
     
     int ParseStringForCommand(ref ReadOnlySpan<char> inputString, CommandData[] devCommands, int commandCount) {
         /*
@@ -2425,7 +2099,7 @@ public class DevConsole : MonoBehaviour
             /*
              * When applying command hint
              */
-            if (HintValue[indexOfHint].GetType() == COMMAND_TYPE) { 
+            if (HintValue[indexOfHint].GetType() == TYPE_COMMAND_DATA) { 
                 commandIndex = HintIndex[indexOfHint];
                 commandContent.text = Commands[commandIndex].displayName;
                 return;
@@ -2454,7 +2128,7 @@ public class DevConsole : MonoBehaviour
              * ScriptableObjects and everything else
              */
             
-            if (SO_TYPE.IsAssignableFrom(argumentValue.GetType())) {
+            if (TYPE_SO.IsAssignableFrom(argumentValue.GetType())) {
                 inputArgumentName[argumentCount].text = HintContent[indexOfHint].text;
             }
             else {

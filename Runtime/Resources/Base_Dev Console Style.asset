@@ -17,7 +17,7 @@ MonoBehaviour:
   ConsolIconAnimSpeed: 4
   ConsoleSkin: {fileID: 11400000, guid: 1b7282247aec93042ab5c7d24323d865, type: 2}
   keepConsoleOpenAfterCommand: 0
-  openConsoleKey: 
+  openConsoleKey: 09000000
   BackgroundColor: {r: 0.1792453, g: 0.1792453, b: 0.1792453, a: 1}
   InputTextDefault: {r: 0.54901963, g: 0.54901963, b: 0.54901963, a: 1}
   SelectedCommand: {r: 0.9339623, g: 0.9339623, b: 0.9339623, a: 1}
