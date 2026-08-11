@@ -22,6 +22,23 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
+        public static bool mouse_down(this Event e, KeyCode key, bool useOnTrue = true) {
+            if (e.isMouse && e.keyCode == key && e.type == EventType.MouseDown) {
+                if (useOnTrue) e.Use();
+                return true;
+            }
+
+            return false;
+        }
+        
+        public static bool mouse_up(this Event e, KeyCode key, bool useOnTrue = true) {
+            if (e.isMouse && e.keyCode == key && e.type == EventType.MouseUp) {
+                if (useOnTrue) e.Use();
+                return true;
+            }
+
+            return false;
+        }
         
         public static bool ExecuteCommand(this Event e, bool useOnSuccess = true) {
             if (e.isKey && e.type == EventType.KeyDown) {
@@ -50,7 +67,7 @@ namespace Jerbo.DevConsole {
         }
         
         public static bool OpenConsole(this Event e, bool useOnSuccess = true, params KeyCode[] overrideKeys) {
-            if (e.isKey && e.type == EventType.KeyDown) {
+            if (e.isKey && e.type == EventType.KeyUp) {
                 if (overrideKeys != null && overrideKeys.Length > 0) {
                     foreach (KeyCode key in overrideKeys) {
                         if (e.keyCode != key) continue;
