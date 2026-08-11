@@ -37,6 +37,11 @@ namespace Jerbo.DevConsole {
 
             return assets;
         }
+
+
+        public static bool inside(this Vector2 pos, Vector2 min, Vector2 max) {
+            return pos.x >= min.x && pos.x <= max.x && pos.y >= min.y && pos.y <= max.y;
+        }
         
 #endif
     }
