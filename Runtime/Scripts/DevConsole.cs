@@ -1253,7 +1253,7 @@ public class DevConsole : MonoBehaviour
 					parse_arg_result = parse_for_arguments(ref console_input_text, cmd_section.end, Commands[command_selected_idx]);
 				}
 				else {
-					parse_arg_result.num_hints = ParseHints();
+					parse_arg_result.num_hints = parse_for_command_hints(ref console_input_text, Commands);
 				}
 		    }
 	    }
@@ -1350,12 +1350,11 @@ public class DevConsole : MonoBehaviour
 
 	    
 
-		if (false)
-	    {
+		if (false) {
 
 
 
-		parse_arg_result.num_hints = ParseHints();
+			parse_arg_result.num_hints = 0; //ParseHints();
 	    if (inputCommand.commandIndex == -1 && inputCommand.HasText() == false) {
 		    if (CommandHistoryState == History.HIDE)
 			    CommandHistoryState = History.WAIT_FOR_INPUT;
@@ -1663,253 +1662,6 @@ public class DevConsole : MonoBehaviour
 	    #endregion
 		
     }
-    
-    
-    int ParseHints() {
-        int hintsFound = 0;
-        
-        /*
-         * Command history hints
-         */
-        // if (CommandHistoryState != History.HIDE) {
-        //     for (int i = 0; i < HistoryCommands.Count; i++) {
-        //         if (hintsFound == MAX_HINTS) break;
-        //
-        //         HintContent[hintsFound].text = HistoryCommands[i].displayString;
-        //         HintIndex[hintsFound] = i;
-        //         hintsFound++;
-        //     }
-        //
-        //     return hintsFound;
-        // }
-        
-        
-        // TODO wanna add sorting based on how many matches we have, best result at the top
-        // Fill with commands that match
-        if (selected_command_idx == -1) {
-            string[] inputWords = console_input_text.Split(CHAR.SPACE, StringSplitOptions.RemoveEmptyEntries);
-           
-            for (int i = 0; i < active_cmd_count; i++) {
-                if (hintsFound == MAX_HINTS) break;
-                
-                bool matchingHint = true; 
-                foreach (string word in inputWords) {
-                    if (Commands[i].displayName.Contains(word, StringComparison.InvariantCultureIgnoreCase) == false) {
-                        matchingHint = false;
-                        break;
-                    }
-                }
-
-                if (matchingHint) {
-                    HintContent[hintsFound].text = Commands[i].hintText;
-                    HintIndex[hintsFound] = i;
-                    HintValue[hintsFound] = Commands[i];
-                    hintsFound++;
-                }
-            }
-
-            return hintsFound;
-        }
-
-
-        /*
-         * check command for what the next argument type is and parse the appropriate part of input accordingly
-         * 
-         */
-
-
-        int argumentCount = inputCommand.argumentCount;
-        int commandIndex = inputCommand.commandIndex;
-
-        /*
-         * already found all the arguments possible
-         */
-        if (argumentCount >= Commands[commandIndex].parameterCount) {
-            return hintsFound;
-        }
-
-        
-        /*
-         * make input text a char[] and index for how long to avoid allocating each input
-         * trim/remove just moves temp index
-         * how to handle the gui.textfield inputs tho?
-         */
-        
-        string[] inputWithoutMatches = inputCommand.inputContent.text.Split(CHAR.SPACE, StringSplitOptions.RemoveEmptyEntries);
-        Type argumentType = Commands[commandIndex].parameterTypes[argumentCount];
-
-        
-        
-        /*
-         * Bool
-         */
-
-        if (argumentType == typeof(bool)) {
-            HintContent[hintsFound].text = bool.TrueString;
-            HintValue[hintsFound] = true;
-            hintsFound++;
-                    
-            HintContent[hintsFound].text = bool.FalseString;
-            HintValue[hintsFound] = false;
-            hintsFound++;
-            return hintsFound;
-        }
-        
-        
-        
-        /*
-         * Enums
-         */
-
-        if (argumentType.IsEnum) {
-            string[] namesInsideEnum = argumentType.GetEnumNames();
-            for (int i = 0; i < namesInsideEnum.Length; i++) {
-                if (hintsFound == MAX_HINTS) break;
-                
-                bool containsWord = true;
-                for (int wordIndex = 0; wordIndex < inputWithoutMatches.Length; wordIndex++) {
-                    if (namesInsideEnum[i].Contains(inputWithoutMatches[wordIndex], StringComparison.InvariantCultureIgnoreCase) == false) {
-                        containsWord = false;
-                        break;
-                    }
-                }
-
-                if (containsWord) {
-                    HintContent[hintsFound].text = namesInsideEnum[i];
-                    HintIndex[hintsFound] = i;
-                    HintValue[hintsFound] = argumentType.GetEnumValues().GetValue(i);
-                    hintsFound++;
-                }
-            }
-
-            return hintsFound;
-        }
-        
-        
-        /*
-         * ScriptableObjects
-         */
-
-        if (TYPE_SO.IsAssignableFrom(argumentType)) {
-            for (int i = 0; i < Cache.AssetReferences.Length; i++) {
-                if (hintsFound == MAX_HINTS) break;
-
-                ScriptableObject asset = Cache.AssetReferences[i];
-                /*
-                 * Asset is scriptableObject but has wrong inheritance type
-                 */
-                if (argumentType.IsAssignableFrom(asset.GetType()) == false) continue;
-
-                bool containsWord = true;
-                foreach (string word in inputWithoutMatches) {
-                    if (asset.name.Contains(word, StringComparison.InvariantCultureIgnoreCase)) continue;
-
-                    containsWord = false;
-                    break;
-                }
-
-                if (containsWord) {
-                    HintContent[hintsFound].text = asset.name;
-                    HintValue[hintsFound] = asset;
-                    hintsFound++;
-                }
-            }
-
-            return hintsFound;
-        }
-
-        
-        
-        /*
-         * try parse string to argument type and display "Apply Value" hint if its valid, and always select the hint
-         */
-        
-        TypeConverter typeConverter = TypeDescriptor.GetConverter(argumentType);
-        if (typeConverter.CanConvertFrom(typeof(string))) {
-            object stringToValue = null;
-            try {
-                stringToValue = typeConverter.ConvertFromString(inputCommand.inputContent.text);
-            }
-            catch {
-                // ignored
-            }
-            
-            HintContent[hintsFound].text = inputCommand.inputContent.text;
-            HintValue[hintsFound] = stringToValue;
-            hintsFound++;
-            
-            if (stringToValue != null) {
-                selected_hint_idx = 0;
-            }
-            else {
-                selected_hint_idx = -1;
-            }
-                
-            return hintsFound;
-        }
-
-
-
-        return 0;
-        /*
-         * Vectors, ignore thses
-         */
-        bool isVec2 = argumentType == typeof(Vector2);
-        bool isVec3 = argumentType == typeof(Vector3);
-        bool isVec4 = argumentType == typeof(Vector4);
-        if (isVec2 || isVec3 || isVec4) {
-            string[] numbers = inputCommand.inputContent.text.Split(CHAR.SPACE);
-            int count = numbers.Length;
-            if (count < 2 || count > 4)
-                return hintsFound;
-            
-            TypeConverter floatConverter = TypeDescriptor.GetConverter(typeof(float));
-            object[] values = new object[count];
-            for (int i = 0; i < count; i++) {
-                try {
-                    values[i] = floatConverter.ConvertFromString(numbers[i]);
-                }
-                catch {
-                    return hintsFound;
-                }
-            }
-
-            
-            if (isVec2 && count == 2) {
-                Vector2 v = new ((float)values[0], (float)values[1]);
-                HintContent[hintsFound].text = inputCommand.inputContent.text;
-                HintValue[hintsFound] = v;
-                
-                hintsFound++;
-                return hintsFound;
-            }
-            
-            if (isVec3 && count == 3) {
-                Vector3 v = new ((float)values[0], (float)values[1],  (float)values[2]);
-                HintContent[hintsFound].text = inputCommand.inputContent.text;
-                HintValue[hintsFound] = v;
-                
-                hintsFound++;
-                return hintsFound;
-            }
-            
-            if (isVec4 && count == 4) {
-                Vector4 v = new ((float)values[0], (float)values[1], (float)values[2], (float)values[3]);
-                HintContent[hintsFound].text = inputCommand.inputContent.text;
-                HintValue[hintsFound] = v;
-                
-                hintsFound++;
-                return hintsFound;
-            }
-        }
-        
-        
-        
-        return hintsFound;
-    }
-    
-
-
 
     string_section parse_string_for_section(ref string input_string, int start_idx) {
 	    string_section section = new (); 
@@ -2012,7 +1764,7 @@ public class DevConsole : MonoBehaviour
 		    
 		    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
 			    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
-			    if (cmd_name.Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
+			    if (cmd_name.IndexOf(segment_span, StringComparison.OrdinalIgnoreCase) == -1) {
 				    display_as_hint = false;
 				    break;
 			    }
@@ -2038,258 +1790,258 @@ public class DevConsole : MonoBehaviour
      */
     
     parse_arg parse_for_arguments(ref string input, int start_idx, CommandData command) {
-	    /*
-	     * if we find valid matches for all args in command, ignore rest of string
-	     */
-	    parse_arg parse_result = new () { next_idx = start_idx };
-	    int valid_args = 0;
-	    
-	    for (int arg_idx = 0; arg_idx < command.parameterCount; arg_idx++) {
-		    bool require_space_after_arg = arg_idx + 1 < command.parameterCount;
-		    parse_result = parse_hints_for_arg_type(ref input, parse_result.next_idx, command.parameterTypes[arg_idx], require_space_after_arg);
-		    
-		    // 0 = invalid arg, 1 = valid arg
-		    if (parse_result.valid_args == 0) {
-			    break;
-		    }
-
-		    if (arg_idx + 1 < command.parameterCount) {
-			    if (parse_result.next_idx >= input.Length || input[parse_result.next_idx] != CHAR.SPACE) {
-				    break;
-			    }
-		    }
-		    
-			valid_args++;
-	    }
-
-	    parse_result.valid_args = valid_args;
-	    return parse_result;
-    }
-    
+     	    /*
+     	     * if we find valid matches for all args in command, ignore rest of string
+     	     */
+     	    parse_arg parse_result = new () { next_idx = start_idx };
+     	    int valid_args = 0;
+     	    
+     	    for (int arg_idx = 0; arg_idx < command.parameterCount; arg_idx++) {
+     		    bool require_space_after_arg = arg_idx + 1 < command.parameterCount;
+     		    parse_result = parse_hints_for_arg_type(ref input, parse_result.next_idx, command.parameterTypes[arg_idx], require_space_after_arg);
+     		    
+     		    // 0 = invalid arg, 1 = valid arg
+     		    if (parse_result.valid_args == 0) {
+     			    break;
+     		    }
+     
+     		    if (arg_idx + 1 < command.parameterCount) {
+     			    if (parse_result.next_idx >= input.Length || input[parse_result.next_idx] != CHAR.SPACE) {
+     				    break;
+     			    }
+     		    }
+     		    
+     			valid_args++;
+     	    }
+     
+     	    parse_result.valid_args = valid_args;
+     	    return parse_result;
+         }
+         
     bool has_space_at_index(ref string input, int start_idx, bool must_have_space) {
-	    if (must_have_space == false) {
-		    return true;
-	    }
-	    
-	    return start_idx < input.Length && input[start_idx] == CHAR.SPACE;
-    }
-    
+     	    if (must_have_space == false) {
+     		    return true;
+     	    }
+     	    
+     	    return start_idx < input.Length && input[start_idx] == CHAR.SPACE;
+         }
+         
     parse_arg parse_hints_for_arg_type(ref string input, int start_idx, Type arg_type, bool require_space_after_arg) {
-	    
-	    parse_arg parse_result = new (){ next_idx = start_idx };
-	    int length_of_input_left = input.Length - parse_result.next_idx;
-	    if (length_of_input_left == 0) {
-		    return parse_result;
-	    }
-	    
-	    // using first index in remaining segments start_idx so that i skip empty spaces
-		string_section[] remaining_segments = parse_string_for_remaining_sections(ref input, parse_result.next_idx);
-		bool has_segments = remaining_segments.Length > 0;
-		
-		
-		/*
-		 * TODO
-		 * #### BOOL ####
-		 */
-	    
-	    if (arg_type == typeof(bool)) {
-
-		    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
-		    	if (remaining_segments[0].length == bool.TrueString.Length) {
-				    if (string.Compare(input, remaining_segments[0].start_idx, bool.TrueString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0) 
-				    {
-					    parse_result.next_idx = remaining_segments[0].end;
-					    parse_result.valid_args++;
-				    }
-		    	}
-		    	else if (remaining_segments[0].length == bool.FalseString.Length) {
-				    if (string.Compare(input, remaining_segments[0].start_idx, bool.FalseString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0 ) 
-				    {
-					    parse_result.next_idx = remaining_segments[0].end;
-					    parse_result.valid_args++;
-				    }
-		    	}
-		    }
-		    
-			// hints
-		    bool show_hint_true = true;
-		    bool show_hint_false = true;
-		    
-		    
-		    for (int idx = 0; idx < remaining_segments.Length; idx++) {
-			    ReadOnlySpan<char> segment = input.AsSpan(remaining_segments[idx].start_idx, remaining_segments[idx].length);
-			    
-			    if (show_hint_true && bool.TrueString.AsSpan().Contains(segment, StringComparison.OrdinalIgnoreCase) == false) {
-					show_hint_true = false;
-			    }
-			
-			    if (show_hint_false && bool.FalseString.AsSpan().Contains(segment, StringComparison.OrdinalIgnoreCase) == false) {
-				    show_hint_false = false;
-			    }
-			
-			    if (show_hint_false == false && show_hint_true == false) {
-				    break;
-			    }
-		    }
-
-		    if (show_hint_true) {
-			    HintContent[parse_result.num_hints].text = bool.TrueString;
-			    HintValue[parse_result.num_hints++]      = true;
-		    }
-
-		    if (show_hint_false) {
-			    HintContent[parse_result.num_hints].text = bool.FalseString;
-			    HintValue[parse_result.num_hints++]      = false;
-		    }
-	    }
-	    
-	    
-	    /*
-	     * TODO
-	     * #### ENUM ####
-	     */
-	    else if (arg_type.IsEnum) {
-		    
-		    // check if valid arg
-		    string[] enum_names = arg_type.GetEnumNames();
-		    int length_of_match = -1;
-		    int idx_best_match = -1;
-
-		    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
-		    	// longest match if any
-		    	for (int idx = 0; idx < enum_names.Length; idx++) {
-				    if (enum_names[idx].Length > length_of_input_left || length_of_match > enum_names[idx].Length) {
-					    continue;
-				    }
-				
-				    if (string.Compare(input, remaining_segments[0].start_idx, enum_names[idx], 0, enum_names[idx].Length, StringComparison.OrdinalIgnoreCase) == 0) {
-					    length_of_match = enum_names[idx].Length;
-					    idx_best_match = idx;
-				    }
-		    	}
-		    }
-
-		    // is valid enum arg
-		    if (idx_best_match != -1) {
-			    parse_result.next_idx = remaining_segments[0].start_idx + length_of_match;
-			    parse_result.valid_args++;
-		    }
-		    
-		    
-		    // get hints
-		    Array enum_values = arg_type.GetEnumValues();
-		    for (int enum_idx = 0; enum_idx < enum_names.Length; enum_idx++) { 
-			    bool display_as_hint = true;
-			    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
-				    if (remaining_segments[section_idx].length > enum_names[enum_idx].Length) {
-					    display_as_hint = false;
-					    break;
-				    }
-
-				    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
-				    if (enum_names[enum_idx].AsSpan().Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
-					    display_as_hint = false;
-					    break;
-				    }
-			    }
-			    
-			    if (display_as_hint) {
-				    HintContent[parse_result.num_hints].text = enum_names[enum_idx];
-				    HintValue[parse_result.num_hints++] = enum_values.GetValue(enum_idx);
-				    if (parse_result.num_hints >= MAX_HINTS) {
-					    break;
-				    }
-			    }
-			}
-	    }
-	    
-	    
-	    /*
-	     * TODO
-	     * #### SCRIPTABLE OBJECTS ####
-	     */
-
-	    
-	    else if (TYPE_SO.IsAssignableFrom(arg_type)) {
-		    
-		    int length_of_match = -1;
-		    int idx_best_match = -1;
-		    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
-		    	ReadOnlySpan<char> full_arg_segment = input.AsSpan(remaining_segments[0].start_idx);
-		    	for (int idx = 0; idx < Cache.AssetReferences.Length; idx++) {
-					ScriptableObject asset = Cache.AssetReferences[idx];
-					if (arg_type.IsAssignableFrom(asset.GetType()) == false || asset.name.Length < length_of_match) {
-						continue;
-					}
-					
-					if (full_arg_segment.StartsWith(asset.name.AsSpan(), StringComparison.OrdinalIgnoreCase)) {
-						length_of_match = asset.name.Length;
-						idx_best_match = idx;
-					}
-				}
-		    }
-		    
-		    if (idx_best_match != -1) {
-			    parse_result.next_idx = remaining_segments[0].start_idx + length_of_match;
-			    parse_result.valid_args++;
-		    }
-		    
-		    
-		    for (int asset_idx = 0; asset_idx < Cache.AssetReferences.Length; asset_idx++) {
-			    ScriptableObject asset = Cache.AssetReferences[asset_idx];
-			    if (arg_type.IsAssignableFrom(asset.GetType()) == false) {
-				    continue;
-			    }
-
-			    bool display_as_hint = true;
-			    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
-				    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
-				    if (asset.name.AsSpan().Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
-					    display_as_hint = false;
-					    break;
-				    }
-			    }
-
-			    if (display_as_hint) {
-				    HintContent[parse_result.num_hints].text = asset.name;
-				    HintValue[parse_result.num_hints++] = asset;
-				    if (parse_result.num_hints >= MAX_HINTS) {
-					    break;
-				    }
-			    }
-		    }
-		    
-		    
-	    }
-	    
-	    
-	    
-	    /*
-	     * TODO
-	     * #### NUMBERS AND OTHER ####
-	     */
-
-	    else if (remaining_segments.Length > 0) {
-		    TypeConverter type_converter = TypeDescriptor.GetConverter(arg_type);
-		    if (type_converter.CanConvertFrom(typeof(string))) {
-			    object string_to_value = null;
-			    try {
-				    string_to_value = type_converter.ConvertFromString(input[remaining_segments[0].start_idx..remaining_segments[0].end]);
-			    }
-			    catch (Exception _) { } // ignore errors, idc
-			    finally {
-				    if (string_to_value != null && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
-						parse_result.next_idx = input.Length;
-					    parse_result.valid_args++;
-					}
-			    }
-		    }
-	    }
-	    
-	    
-
-	    return parse_result;
-    }
+        
+        parse_arg parse_result = new (){ next_idx = start_idx };
+        int length_of_input_left = input.Length - parse_result.next_idx;
+        if (length_of_input_left == 0) {
+     	    return parse_result;
+        }
+        
+        // using first index in remaining segments start_idx so that i skip empty spaces
+     	string_section[] remaining_segments = parse_string_for_remaining_sections(ref input, parse_result.next_idx);
+     	bool has_segments = remaining_segments.Length > 0;
+     	
+     	
+     	/*
+     	 * TODO
+     	 * #### BOOL ####
+     	 */
+        
+        if (arg_type == typeof(bool)) {
+ 
+     	    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
+     		    if (remaining_segments[0].length == bool.TrueString.Length) {
+     			    if (string.Compare(input, remaining_segments[0].start_idx, bool.TrueString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0) 
+     			    {
+     				    parse_result.next_idx = remaining_segments[0].end;
+     				    parse_result.valid_args++;
+     			    }
+     		    }
+     		    else if (remaining_segments[0].length == bool.FalseString.Length) {
+     			    if (string.Compare(input, remaining_segments[0].start_idx, bool.FalseString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0 ) 
+     			    {
+     				    parse_result.next_idx = remaining_segments[0].end;
+     				    parse_result.valid_args++;
+     			    }
+     		    }
+     	    }
+     	    
+     		// hints
+     	    bool show_hint_true = true;
+     	    bool show_hint_false = true;
+     	    
+     	    
+     	    for (int idx = 0; idx < remaining_segments.Length; idx++) {
+     		    ReadOnlySpan<char> segment = input.AsSpan(remaining_segments[idx].start_idx, remaining_segments[idx].length);
+     		    
+     		    if (show_hint_true && bool.TrueString.AsSpan().IndexOf(segment, StringComparison.OrdinalIgnoreCase) == -1) {
+     				show_hint_true = false;
+     		    }
+     		
+     		    if (show_hint_false && bool.FalseString.AsSpan().IndexOf(segment, StringComparison.OrdinalIgnoreCase) == -1) {
+     			    show_hint_false = false;
+     		    }
+     		
+     		    if (show_hint_false == false && show_hint_true == false) {
+     			    break;
+     		    }
+     	    }
+ 
+     	    if (show_hint_true) {
+     		    HintContent[parse_result.num_hints].text = bool.TrueString;
+     		    HintValue[parse_result.num_hints++]      = true;
+     	    }
+ 
+     	    if (show_hint_false) {
+     		    HintContent[parse_result.num_hints].text = bool.FalseString;
+     		    HintValue[parse_result.num_hints++]      = false;
+     	    }
+        }
+        
+        
+        /*
+         * TODO
+         * #### ENUM ####
+         */
+        else if (arg_type.IsEnum) {
+     	    
+     	    // check if valid arg
+     	    string[] enum_names = arg_type.GetEnumNames();
+     	    int length_of_match = -1;
+     	    int idx_best_match = -1;
+ 
+     	    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
+     		    // longest match if any
+     		    for (int idx = 0; idx < enum_names.Length; idx++) {
+     			    if (enum_names[idx].Length > length_of_input_left || length_of_match > enum_names[idx].Length) {
+     				    continue;
+     			    }
+     			
+     			    if (string.Compare(input, remaining_segments[0].start_idx, enum_names[idx], 0, enum_names[idx].Length, StringComparison.OrdinalIgnoreCase) == 0) {
+     				    length_of_match = enum_names[idx].Length;
+     				    idx_best_match = idx;
+     			    }
+     		    }
+     	    }
+ 
+     	    // is valid enum arg
+     	    if (idx_best_match != -1) {
+     		    parse_result.next_idx = remaining_segments[0].start_idx + length_of_match;
+     		    parse_result.valid_args++;
+     	    }
+     	    
+     	    
+     	    // get hints
+     	    Array enum_values = arg_type.GetEnumValues();
+     	    for (int enum_idx = 0; enum_idx < enum_names.Length; enum_idx++) { 
+     		    bool display_as_hint = true;
+     		    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
+     			    if (remaining_segments[section_idx].length > enum_names[enum_idx].Length) {
+     				    display_as_hint = false;
+     				    break;
+     			    }
+ 
+     			    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
+     			    if (enum_names[enum_idx].AsSpan().IndexOf(segment_span, StringComparison.OrdinalIgnoreCase) == -1) {
+     				    display_as_hint = false;
+     				    break;
+     			    }
+     		    }
+     		    
+     		    if (display_as_hint) {
+     			    HintContent[parse_result.num_hints].text = enum_names[enum_idx];
+     			    HintValue[parse_result.num_hints++] = enum_values.GetValue(enum_idx);
+     			    if (parse_result.num_hints >= MAX_HINTS) {
+     				    break;
+     			    }
+     		    }
+     		}
+        }
+        
+        
+        /*
+         * TODO
+         * #### SCRIPTABLE OBJECTS ####
+         */
+ 
+        
+        else if (TYPE_SO.IsAssignableFrom(arg_type)) {
+     	    
+     	    int length_of_match = -1;
+     	    int idx_best_match = -1;
+     	    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
+     		    ReadOnlySpan<char> full_arg_segment = input.AsSpan(remaining_segments[0].start_idx);
+     		    for (int idx = 0; idx < Cache.AssetReferences.Length; idx++) {
+     				ScriptableObject asset = Cache.AssetReferences[idx];
+     				if (arg_type.IsAssignableFrom(asset.GetType()) == false || asset.name.Length < length_of_match) {
+     					continue;
+     				}
+     				
+     				if (full_arg_segment.StartsWith(asset.name.AsSpan(), StringComparison.OrdinalIgnoreCase)) {
+     					length_of_match = asset.name.Length;
+     					idx_best_match = idx;
+     				}
+     			}
+     	    }
+     	    
+     	    if (idx_best_match != -1) {
+     		    parse_result.next_idx = remaining_segments[0].start_idx + length_of_match;
+     		    parse_result.valid_args++;
+     	    }
+     	    
+     	    
+     	    for (int asset_idx = 0; asset_idx < Cache.AssetReferences.Length; asset_idx++) {
+     		    ScriptableObject asset = Cache.AssetReferences[asset_idx];
+     		    if (arg_type.IsAssignableFrom(asset.GetType()) == false) {
+     			    continue;
+     		    }
+ 
+     		    bool display_as_hint = true;
+     		    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
+     			    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
+     			    if (asset.name.AsSpan().IndexOf(segment_span, StringComparison.OrdinalIgnoreCase) == -1) {
+     				    display_as_hint = false;
+     				    break;
+     			    }
+     		    }
+ 
+     		    if (display_as_hint) {
+     			    HintContent[parse_result.num_hints].text = asset.name;
+     			    HintValue[parse_result.num_hints++] = asset;
+     			    if (parse_result.num_hints >= MAX_HINTS) {
+     				    break;
+     			    }
+     		    }
+     	    }
+     	    
+     	    
+        }
+        
+        
+        
+        /*
+         * TODO
+         * #### NUMBERS AND OTHER ####
+         */
+ 
+        else if (remaining_segments.Length > 0) {
+     	    TypeConverter type_converter = TypeDescriptor.GetConverter(arg_type);
+     	    if (type_converter.CanConvertFrom(typeof(string))) {
+     		    object string_to_value = null;
+     		    try {
+     			    string_to_value = type_converter.ConvertFromString(input[remaining_segments[0].start_idx..remaining_segments[0].end]);
+     		    }
+     		    catch (Exception _) { } // ignore errors, idc
+     		    finally {
+     			    if (string_to_value != null && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
+     					parse_result.next_idx = input.Length;
+     				    parse_result.valid_args++;
+     				}
+     		    }
+     	    }
+        }
+        
+        
+ 
+        return parse_result;
+     }
 
 
     // TODO this whole thing is kinda ugly
