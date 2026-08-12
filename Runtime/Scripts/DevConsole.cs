@@ -765,6 +765,7 @@ public class DevConsole : MonoBehaviour
         CommandHistoryState = History.WAIT_FOR_INPUT;
         // Event.current.Use();
         mouse_pos = Event.current.mousePosition;
+        command_selected_idx = -1;
         // DebugManager.instance.enableRuntimeUI = false;
         
         // TODO handle assets loading async
@@ -918,7 +919,7 @@ public class DevConsole : MonoBehaviour
     device current_device = device.keyboard;
     
     string console_input_text;
-    int command_selected_idx;
+    int command_selected_idx = -1;
     int history_selected_idx;
     int force_move_cursor_to_end_ticks;
     parse_arg parse_arg_result;
@@ -1111,11 +1112,11 @@ public class DevConsole : MonoBehaviour
 					
 					string_section cmd_section = parse_string_for_section(ref console_input_text, 0);
 					command_selected_idx = parse_for_command(ref console_input_text, ref cmd_section, Commands, active_cmd_count);
-					if (command_selected_idx != -1) {
+					if (command_selected_idx != -1 && has_space_at_index(ref console_input_text, cmd_section.end, true)) {
 						parse_arg_result = parse_for_arguments(ref console_input_text, cmd_section.end, Commands[command_selected_idx]);
 					}
 					else {
-						parse_arg_result.num_hints = ParseHints(); // re-write hint parser to new logic
+						parse_arg_result.num_hints = parse_for_command_hints(ref console_input_text, Commands);
 					}
 			    }
 		    }
@@ -1128,7 +1129,7 @@ public class DevConsole : MonoBehaviour
 		    input_type_guide.width -= input_text_width + 2;
 
 		    if (command_selected_idx == -1) {
-				GUI.Label(input_type_guide, "<size=75%><alpha=#88><DevCommand>");
+				GUI.Label(input_type_guide, $"<size=75%><alpha=#88><DevCommand>");
 		    }
 		    else {
 			    CommandData selected_command = Commands[command_selected_idx];
@@ -1233,10 +1234,10 @@ public class DevConsole : MonoBehaviour
 
 		    // apply hints
 		    bool insert_hint = insert_hint_pressed || (mouse_clicked && mouse_pos.inside(hint_background.min, hint_background.max));
-		    if (insert_hint) {
+		    if (insert_hint && selected_hint_idx != -1) {
 			    if (selected_command_idx != -1) {
 				    // has command
-				    string hint_text = HintContent[selected_hint_idx].text;
+				    string hint_text = Commands[HintIndex[selected_hint_idx]].displayName;
 				    string_section cmd_section_without_args = parse_string_for_section(ref hint_text, 0);
 					apply_selected_hint(ref console_input_text, hint_text.AsSpan(cmd_section_without_args.start_idx, cmd_section_without_args.length), parse_arg_result.next_idx);
 			    }
@@ -1981,7 +1982,7 @@ public class DevConsole : MonoBehaviour
     
     
     // TODO can make methods that gets start & length of cmd/arg string
-    int parse_for_command(ref string input, ref string_section section, CommandData[] commands, int num_commands)  {
+    int parse_for_command(ref string input, ref string_section section, CommandData[] commands, int num_commands) {
 	    int command_idx = -1;
 	    
 	    for (int idx = 0; idx < num_commands; idx++) {
@@ -1997,6 +1998,40 @@ public class DevConsole : MonoBehaviour
 
 	    return command_idx;
     }
+
+
+    int parse_for_command_hints(ref string input, CommandData[] commands) {
+	    
+	    string_section[] remaining_segments = parse_string_for_remaining_sections(ref input, 0);
+	    int num_hints = 0;
+	    
+	    for (int cmd_idx = 0; cmd_idx < commands.Length; cmd_idx++) {
+		    
+		    ReadOnlySpan<char> cmd_name = commands[cmd_idx].displayName.AsSpan();
+		    bool display_as_hint = true;
+		    
+		    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
+			    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
+			    if (cmd_name.Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
+				    display_as_hint = false;
+				    break;
+			    }
+		    }
+
+		    if (display_as_hint) {
+			    HintContent[num_hints].text = cmd_name.ToString();
+			    HintValue[num_hints] = commands[cmd_idx];
+			    HintIndex[num_hints] = cmd_idx;
+			    num_hints++;
+			    
+			    if (num_hints >= MAX_HINTS) {
+				    break;
+			    }
+		    }
+	    }
+
+	    return num_hints;
+    }
     
     /*
      * figure out if we have valid cmd with args or if we should display hints for current arg type
@@ -2010,20 +2045,36 @@ public class DevConsole : MonoBehaviour
 	    int valid_args = 0;
 	    
 	    for (int arg_idx = 0; arg_idx < command.parameterCount; arg_idx++) {
-		    parse_result = parse_hints_for_arg_type(ref input, parse_result.next_idx, command.parameterTypes[arg_idx]);
+		    bool require_space_after_arg = arg_idx + 1 < command.parameterCount;
+		    parse_result = parse_hints_for_arg_type(ref input, parse_result.next_idx, command.parameterTypes[arg_idx], require_space_after_arg);
+		    
 		    // 0 = invalid arg, 1 = valid arg
 		    if (parse_result.valid_args == 0) {
 			    break;
 		    }
 
-		    valid_args++;
+		    if (arg_idx + 1 < command.parameterCount) {
+			    if (parse_result.next_idx >= input.Length || input[parse_result.next_idx] != CHAR.SPACE) {
+				    break;
+			    }
+		    }
+		    
+			valid_args++;
 	    }
 
 	    parse_result.valid_args = valid_args;
 	    return parse_result;
     }
     
-    parse_arg parse_hints_for_arg_type(ref string input, int start_idx, Type arg_type) {
+    bool has_space_at_index(ref string input, int start_idx, bool must_have_space) {
+	    if (must_have_space == false) {
+		    return true;
+	    }
+	    
+	    return start_idx < input.Length && input[start_idx] == CHAR.SPACE;
+    }
+    
+    parse_arg parse_hints_for_arg_type(ref string input, int start_idx, Type arg_type, bool require_space_after_arg) {
 	    
 	    parse_arg parse_result = new (){ next_idx = start_idx };
 	    int length_of_input_left = input.Length - parse_result.next_idx;
@@ -2033,6 +2084,7 @@ public class DevConsole : MonoBehaviour
 	    
 	    // using first index in remaining segments start_idx so that i skip empty spaces
 		string_section[] remaining_segments = parse_string_for_remaining_sections(ref input, parse_result.next_idx);
+		bool has_segments = remaining_segments.Length > 0;
 		
 		
 		/*
@@ -2041,57 +2093,53 @@ public class DevConsole : MonoBehaviour
 		 */
 	    
 	    if (arg_type == typeof(bool)) {
+
+		    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
+		    	if (remaining_segments[0].length == bool.TrueString.Length) {
+				    if (string.Compare(input, remaining_segments[0].start_idx, bool.TrueString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0) 
+				    {
+					    parse_result.next_idx = remaining_segments[0].end;
+					    parse_result.valid_args++;
+				    }
+		    	}
+		    	else if (remaining_segments[0].length == bool.FalseString.Length) {
+				    if (string.Compare(input, remaining_segments[0].start_idx, bool.FalseString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0 ) 
+				    {
+					    parse_result.next_idx = remaining_segments[0].end;
+					    parse_result.valid_args++;
+				    }
+		    	}
+		    }
 		    
-		    if (remaining_segments.Length == 0) {
+			// hints
+		    bool show_hint_true = true;
+		    bool show_hint_false = true;
+		    
+		    
+		    for (int idx = 0; idx < remaining_segments.Length; idx++) {
+			    ReadOnlySpan<char> segment = input.AsSpan(remaining_segments[idx].start_idx, remaining_segments[idx].length);
+			    
+			    if (show_hint_true && bool.TrueString.AsSpan().Contains(segment, StringComparison.OrdinalIgnoreCase) == false) {
+					show_hint_true = false;
+			    }
+			
+			    if (show_hint_false && bool.FalseString.AsSpan().Contains(segment, StringComparison.OrdinalIgnoreCase) == false) {
+				    show_hint_false = false;
+			    }
+			
+			    if (show_hint_false == false && show_hint_true == false) {
+				    break;
+			    }
+		    }
+
+		    if (show_hint_true) {
 			    HintContent[parse_result.num_hints].text = bool.TrueString;
 			    HintValue[parse_result.num_hints++]      = true;
-				    
+		    }
+
+		    if (show_hint_false) {
 			    HintContent[parse_result.num_hints].text = bool.FalseString;
 			    HintValue[parse_result.num_hints++]      = false;
-		    }
-		    else if (remaining_segments[0].length == bool.TrueString.Length) {
-			    if (string.Compare(input, remaining_segments[0].start_idx, bool.TrueString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0) {
-				    parse_result.next_idx = remaining_segments[0].end;
-				    parse_result.valid_args++;
-			    }
-		    }
-		    else if (remaining_segments[0].length == bool.FalseString.Length) {
-			    if (string.Compare(input, remaining_segments[0].start_idx, bool.FalseString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0) {
-				    parse_result.next_idx = remaining_segments[0].end;
-				    parse_result.valid_args++;
-			    }
-		    }
-		    else {
-				// hints
-			    bool show_hint_true = true;
-			    bool show_hint_false = true;
-			    
-			    
-			    for (int idx = 0; idx < remaining_segments.Length; idx++) {
-				    ReadOnlySpan<char> segment = input.AsSpan(remaining_segments[idx].start_idx, remaining_segments[idx].length);
-				    
-				    if (show_hint_true && bool.TrueString.AsSpan().Contains(segment, StringComparison.OrdinalIgnoreCase) == false) {
-						show_hint_true = false;
-				    }
-				
-				    if (show_hint_false && bool.FalseString.AsSpan().Contains(segment, StringComparison.OrdinalIgnoreCase) == false) {
-					    show_hint_false = false;
-				    }
-				
-				    if (show_hint_false == false && show_hint_true == false) {
-					    break;
-				    }
-			    }
-
-			    if (show_hint_true) {
-				    HintContent[parse_result.num_hints].text = bool.TrueString;
-				    HintValue[parse_result.num_hints++]      = true;
-			    }
-
-			    if (show_hint_false) {
-				    HintContent[parse_result.num_hints].text = bool.FalseString;
-				    HintValue[parse_result.num_hints++]      = false;
-			    }
 		    }
 	    }
 	    
@@ -2107,8 +2155,7 @@ public class DevConsole : MonoBehaviour
 		    int length_of_match = -1;
 		    int idx_best_match = -1;
 
-		    if (remaining_segments.Length > 0) {
-			    
+		    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
 		    	// longest match if any
 		    	for (int idx = 0; idx < enum_names.Length; idx++) {
 				    if (enum_names[idx].Length > length_of_input_left || length_of_match > enum_names[idx].Length) {
@@ -2127,34 +2174,33 @@ public class DevConsole : MonoBehaviour
 			    parse_result.next_idx = remaining_segments[0].start_idx + length_of_match;
 			    parse_result.valid_args++;
 		    }
-		    else {
-			    
-			    // not valid arg, get hints instead
-			    Array enum_values = arg_type.GetEnumValues();
-			    for (int enum_idx = 0; enum_idx < enum_names.Length; enum_idx++) { 
-				    bool display_as_hint = true;
-				    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
-					    if (remaining_segments[section_idx].length > enum_names[enum_idx].Length) {
-						    display_as_hint = false;
-						    break;
-					    }
+		    
+		    
+		    // get hints
+		    Array enum_values = arg_type.GetEnumValues();
+		    for (int enum_idx = 0; enum_idx < enum_names.Length; enum_idx++) { 
+			    bool display_as_hint = true;
+			    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
+				    if (remaining_segments[section_idx].length > enum_names[enum_idx].Length) {
+					    display_as_hint = false;
+					    break;
+				    }
 
-					    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
-					    if (enum_names[enum_idx].AsSpan().Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
-						    display_as_hint = false;
-						    break;
-					    }
+				    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
+				    if (enum_names[enum_idx].AsSpan().Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
+					    display_as_hint = false;
+					    break;
 				    }
-				    
-				    if (display_as_hint) {
-					    HintContent[parse_result.num_hints].text = enum_names[enum_idx];
-					    HintValue[parse_result.num_hints++] = enum_values.GetValue(enum_idx);
-					    if (parse_result.num_hints >= MAX_HINTS) {
-						    break;
-					    }
+			    }
+			    
+			    if (display_as_hint) {
+				    HintContent[parse_result.num_hints].text = enum_names[enum_idx];
+				    HintValue[parse_result.num_hints++] = enum_values.GetValue(enum_idx);
+				    if (parse_result.num_hints >= MAX_HINTS) {
+					    break;
 				    }
-				}
-		    }
+			    }
+			}
 	    }
 	    
 	    
@@ -2168,7 +2214,7 @@ public class DevConsole : MonoBehaviour
 		    
 		    int length_of_match = -1;
 		    int idx_best_match = -1;
-		    if (remaining_segments.Length > 0) {
+		    if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
 		    	ReadOnlySpan<char> full_arg_segment = input.AsSpan(remaining_segments[0].start_idx);
 		    	for (int idx = 0; idx < Cache.AssetReferences.Length; idx++) {
 					ScriptableObject asset = Cache.AssetReferences[idx];
@@ -2187,33 +2233,33 @@ public class DevConsole : MonoBehaviour
 			    parse_result.next_idx = remaining_segments[0].start_idx + length_of_match;
 			    parse_result.valid_args++;
 		    }
-		    else {
-			    
-			    for (int asset_idx = 0; asset_idx < Cache.AssetReferences.Length; asset_idx++) {
-				    ScriptableObject asset = Cache.AssetReferences[asset_idx];
-				    if (arg_type.IsAssignableFrom(asset.GetType()) == false) {
-					    continue;
-				    }
+		    
+		    
+		    for (int asset_idx = 0; asset_idx < Cache.AssetReferences.Length; asset_idx++) {
+			    ScriptableObject asset = Cache.AssetReferences[asset_idx];
+			    if (arg_type.IsAssignableFrom(asset.GetType()) == false) {
+				    continue;
+			    }
 
-				    bool display_as_hint = true;
-				    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
-					    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
-				    	if (asset.name.AsSpan().Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
-						    display_as_hint = false;
-						    break;
-					    }
-				    }
-
-				    if (display_as_hint) {
-					    HintContent[parse_result.num_hints].text = asset.name;
-					    HintValue[parse_result.num_hints++] = asset;
-					    if (parse_result.num_hints >= MAX_HINTS) {
-						    break;
-					    }
+			    bool display_as_hint = true;
+			    for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
+				    ReadOnlySpan<char> segment_span = input.AsSpan(remaining_segments[section_idx].start_idx, remaining_segments[section_idx].length);
+				    if (asset.name.AsSpan().Contains(segment_span, StringComparison.OrdinalIgnoreCase) == false) {
+					    display_as_hint = false;
+					    break;
 				    }
 			    }
-			    
+
+			    if (display_as_hint) {
+				    HintContent[parse_result.num_hints].text = asset.name;
+				    HintValue[parse_result.num_hints++] = asset;
+				    if (parse_result.num_hints >= MAX_HINTS) {
+					    break;
+				    }
+			    }
 		    }
+		    
+		    
 	    }
 	    
 	    
@@ -2232,7 +2278,7 @@ public class DevConsole : MonoBehaviour
 			    }
 			    catch (Exception _) { } // ignore errors, idc
 			    finally {
-				    if (string_to_value != null) {
+				    if (string_to_value != null && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
 						parse_result.next_idx = input.Length;
 					    parse_result.valid_args++;
 					}
@@ -2252,7 +2298,9 @@ public class DevConsole : MonoBehaviour
 	    ReadOnlySpan<char> segment_to_keep = input.AsSpan(first_char_idx, next_idx);
 	    StringBuilder builder = new (segment_to_keep.Length + hint_segment.Length);
 	    builder.Append(segment_to_keep.TrimStart(CHAR.SPACE).TrimEnd(CHAR.SPACE));
-	    builder.Append(CHAR.SPACE);
+	    if (builder.Length > 0) {
+		    builder.Append(CHAR.SPACE);
+	    }
 	    builder.Append(hint_segment);
 	    builder.Append(CHAR.SPACE);
 	    input = builder.ToString();
