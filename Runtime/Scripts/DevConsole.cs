@@ -920,6 +920,7 @@ public class DevConsole : MonoBehaviour
     string console_input_text;
     int command_selected_idx;
     int history_selected_idx;
+    int force_move_cursor_to_end_ticks;
     parse_arg parse_arg_result;
     Vector2 mouse_pos;
 
@@ -1013,8 +1014,8 @@ public class DevConsole : MonoBehaviour
 		    current_device = device.mouse;
 		    mouse_pos = input_action.mousePosition;
 	    }
-	    bool up = input_action.NavigateUp(false);
-	    bool down = input_action.NavigateDown(false);
+	    bool up = input_action.NavigateUp();
+	    bool down = input_action.NavigateDown();
 	    switch (console_state) {
 		    case console_input_state.WAITING_FOR_INPUT:
 			    if (up || down) {
@@ -1022,8 +1023,7 @@ public class DevConsole : MonoBehaviour
 				    input_action.Use();
 				    // select first or last history command
 				    selected_hint_idx = down ? HistoryCommands.Count - 1 : 0;
-				    
-				    // TODO add all history commands to hint list
+				    force_move_cursor_to_end_ticks = 4;
 			    }
 			    break;
 		    
@@ -1035,6 +1035,7 @@ public class DevConsole : MonoBehaviour
 					    selected_hint_idx = 0;
 				    }
 				    input_action.Use();
+				    force_move_cursor_to_end_ticks = 4;
 			    }
 			    else if (down) {
 				    selected_hint_idx--;
@@ -1042,16 +1043,13 @@ public class DevConsole : MonoBehaviour
 					    selected_hint_idx = parse_arg_result.num_hints - 1;
 				    }
 				    input_action.Use();
+				    force_move_cursor_to_end_ticks = 4;
 			    }
 			    break;
 		    
 		    default:
 			    throw new ArgumentOutOfRangeException();
 	    }
-
-	    
-	    
-	    
 	    
 	    
 	    {
@@ -1062,10 +1060,22 @@ public class DevConsole : MonoBehaviour
 		    console_input_size = new Vector2(width - WIDTH_SPACING * 2f, Style.ConsoleTextSize);
 
 		    Rect console_input_background = new (console_input_draw_pos, console_input_size);
-		    GUI.backgroundColor = activeMacro == null ? Style.BackgroundColor : Style.RecordMacroColor;
+		    Color background_color = Style.BackgroundColor;
+		    if (activeMacro != null) {
+			    background_color = Style.RecordMacroColor;
+		    } else if (command_selected_idx != -1 && parse_arg_result.valid_args >= Commands[command_selected_idx].num_required_args) {
+			    background_color = Style.HintTextColorSelected;
+		    }
+		    GUI.backgroundColor = background_color;
 		    GUI.Box(console_input_background, string.Empty, BoxBorderSkin());
 		    GUI.backgroundColor = Style.BackgroundColor;
 		    GUI.Box(console_input_background, string.Empty);
+		    
+		    
+		    if (force_move_cursor_to_end_ticks > 0) {
+			    TextEditor editor = (TextEditor) GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
+			    editor?.MoveTextEnd();
+		    }
 		    
 		    
 		    /*
@@ -1077,28 +1087,16 @@ public class DevConsole : MonoBehaviour
 		    bool mouse_clicked = console_input_background.Contains(mouse_pos) == false && input_action.mouse_down(KeyCode.Mouse0);
 		    bool insert_hint_pressed = current_device == device.keyboard && input_action.InsertHint();
 		    
-		    if (string.Compare(GUI.GetNameOfFocusedControl(), CONSOLE_INPUT_FIELD_ID, StringComparison.OrdinalIgnoreCase) == 0) {
-			    Event ignore_input_event = Event.current;
-			    if (ignore_input_event.type == EventType.KeyDown) {
-				    switch (ignore_input_event.keyCode) {
-					    case KeyCode.UpArrow:
-					    case KeyCode.DownArrow:
-						    input_action.Use();
-						    break;
-				    }
-			    }
-		    }
-		    
 		    GUI.backgroundColor = Color.clear;
 		    GUI.contentColor = Style.InputTextDefault;
 		    Rect input_field_rect = new (console_input_background) {
 			    x = 12,
 			    width = console_input_background.xMax - 12,
 		    };
+		    GUIContent input_content = new GUIContent(console_input_text);
 		    string input_text = GUI.TextField(input_field_rect, console_input_text);
-		    
 		    // TODO only focus when opening?
-			GUI.FocusControl(CONSOLE_INPUT_FIELD_ID);
+		    GUI.FocusControl(CONSOLE_INPUT_FIELD_ID);
 		    
 		    if (console_input_text != input_text) {
 			    if (input_text.Length == 0) {
@@ -1117,9 +1115,38 @@ public class DevConsole : MonoBehaviour
 						parse_arg_result = parse_for_arguments(ref console_input_text, cmd_section.end, Commands[command_selected_idx]);
 					}
 					else {
-						parse_arg_result.num_hints = ParseHints();
+						parse_arg_result.num_hints = ParseHints(); // re-write hint parser to new logic
 					}
 			    }
+		    }
+		    
+		    
+		    // hint label
+		    float input_text_width = Style.ConsoleSkin.textField.CalcSize(input_content).x;
+		    Rect input_type_guide = new Rect(input_field_rect);
+		    input_type_guide.x += input_text_width + 2;
+		    input_type_guide.width -= input_text_width + 2;
+
+		    if (command_selected_idx == -1) {
+				GUI.Label(input_type_guide, "<size=75%><alpha=#88><DevCommand>");
+		    }
+		    else {
+			    CommandData selected_command = Commands[command_selected_idx];
+			    if (parse_arg_result.valid_args < selected_command.parameterCount) {
+				    string arg_name = selected_command.parameterNames[parse_arg_result.valid_args];
+				    Type arg_type = selected_command.parameterTypes[parse_arg_result.valid_args];
+				    
+					GUI.Label(input_type_guide, $"<size=75%><alpha=#88>({arg_name})<color=grey><{arg_type.Name}>");
+			    }
+		    }
+		    
+		    
+		    
+		    
+		    if (force_move_cursor_to_end_ticks > 0) {
+			    force_move_cursor_to_end_ticks--;
+			    TextEditor editor = (TextEditor) GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
+			    editor?.MoveTextEnd();
 		    }
 		    
 	    
@@ -1204,23 +1231,20 @@ public class DevConsole : MonoBehaviour
 
 
 
-		    bool applied_selected_hint = false;
 		    // apply hints
-		    if (current_device == device.mouse) {
-				if (mouse_clicked && mouse_pos.inside(hint_background.min, hint_background.max)) {
-					apply_selected_hint(ref console_input_text, HintContent[selected_hint_idx].text.AsSpan(), parse_arg_result.next_idx);
-					applied_selected_hint = true;
-				}
-		    }
-		    else if (current_device == device.keyboard) {
-			    if (insert_hint_pressed) {
-					apply_selected_hint(ref console_input_text, HintContent[selected_hint_idx].text.AsSpan(), parse_arg_result.next_idx);
-					applied_selected_hint = true;
+		    bool insert_hint = insert_hint_pressed || (mouse_clicked && mouse_pos.inside(hint_background.min, hint_background.max));
+		    if (insert_hint) {
+			    if (selected_command_idx != -1) {
+				    // has command
+				    string hint_text = HintContent[selected_hint_idx].text;
+				    string_section cmd_section_without_args = parse_string_for_section(ref hint_text, 0);
+					apply_selected_hint(ref console_input_text, hint_text.AsSpan(cmd_section_without_args.start_idx, cmd_section_without_args.length), parse_arg_result.next_idx);
 			    }
-		    }
-
-		    if (applied_selected_hint) {
+			    else {
+					apply_selected_hint(ref console_input_text, HintContent[selected_hint_idx].text.AsSpan(), parse_arg_result.next_idx);
+			    }
 				selected_hint_idx = -1;
+				force_move_cursor_to_end_ticks = 4;
 				
 				string_section cmd_section = parse_string_for_section(ref console_input_text, 0);
 				command_selected_idx = parse_for_command(ref console_input_text, ref cmd_section, Commands, active_cmd_count);
@@ -1257,8 +1281,9 @@ public class DevConsole : MonoBehaviour
 	    GUI.contentColor = Style.InputTextDefault;
 	    GUI.enabled = true;
 	    GUIContent debug = new () {
-		    text = $"Selected Hint Index: {selected_hint_idx}\n" +
-		           $"Command Index: {inputCommand.commandIndex}\n" +
+		    text = 
+			       $"Selected Hint Index: {selected_hint_idx}\n" +
+		           // $"Command Index: {inputCommand.commandIndex}\n" +
 		           // $"Color string: {ColorUtility.ToHtmlStringRGBA(Style.HintTextColorDefault)}\n" +
 		           // $"CommandHistoryState: {CommandHistoryState}\n" + 
 		           // $"HistoryCount: {HistoryCommands.Count}\n" +
@@ -1285,7 +1310,7 @@ public class DevConsole : MonoBehaviour
 	    };
 
 	    string color_string_from_idx(string str, int idx) {
-		    if (string.IsNullOrEmpty(str) || idx < 0) {
+		    if (string.IsNullOrEmpty(str) || idx < 0 || idx > str.Length) {
 			    return "";
 		    }
 		    string result = "";
@@ -1956,7 +1981,7 @@ public class DevConsole : MonoBehaviour
     
     
     // TODO can make methods that gets start & length of cmd/arg string
-    int parse_for_command(ref string input, ref string_section section, CommandData[] commands, int num_commands) {
+    int parse_for_command(ref string input, ref string_section section, CommandData[] commands, int num_commands)  {
 	    int command_idx = -1;
 	    
 	    for (int idx = 0; idx < num_commands; idx++) {
@@ -1981,32 +2006,38 @@ public class DevConsole : MonoBehaviour
 	    /*
 	     * if we find valid matches for all args in command, ignore rest of string
 	     */
-	    parse_arg parsed_hint_result = new () { next_idx = start_idx };
-	    
+	    parse_arg parse_result = new () { next_idx = start_idx };
+	    int valid_args = 0;
 	    
 	    for (int arg_idx = 0; arg_idx < command.parameterCount; arg_idx++) {
-		    int valid_args_before = parsed_hint_result.valid_args;
-		    parsed_hint_result = parse_hints_for_arg_type(ref input, parsed_hint_result.next_idx, command.parameterTypes[arg_idx]);
-		    if (parsed_hint_result.valid_args != valid_args_before) {
-			    parsed_hint_result.valid_args++;
-		    }
-		    else {
+		    parse_result = parse_hints_for_arg_type(ref input, parse_result.next_idx, command.parameterTypes[arg_idx]);
+		    // 0 = invalid arg, 1 = valid arg
+		    if (parse_result.valid_args == 0) {
 			    break;
 		    }
+
+		    valid_args++;
 	    }
 
-	    return parsed_hint_result;
+	    parse_result.valid_args = valid_args;
+	    return parse_result;
     }
     
     parse_arg parse_hints_for_arg_type(ref string input, int start_idx, Type arg_type) {
 	    
 	    parse_arg parse_result = new (){ next_idx = start_idx };
 	    int length_of_input_left = input.Length - parse_result.next_idx;
-		string_section[] remaining_segments = parse_string_for_remaining_sections(ref input, parse_result.next_idx);
+	    if (length_of_input_left == 0) {
+		    return parse_result;
+	    }
+	    
 	    // using first index in remaining segments start_idx so that i skip empty spaces
+		string_section[] remaining_segments = parse_string_for_remaining_sections(ref input, parse_result.next_idx);
+		
 		
 		/*
-		 * TODO #### BOOL ####
+		 * TODO
+		 * #### BOOL ####
 		 */
 	    
 	    if (arg_type == typeof(bool)) {
@@ -2066,7 +2097,8 @@ public class DevConsole : MonoBehaviour
 	    
 	    
 	    /*
-	     * TODO #### ENUM ####
+	     * TODO
+	     * #### ENUM ####
 	     */
 	    else if (arg_type.IsEnum) {
 		    
@@ -2127,7 +2159,8 @@ public class DevConsole : MonoBehaviour
 	    
 	    
 	    /*
-	     * TODO #### SCRIPTABLE OBJECTS ####
+	     * TODO
+	     * #### SCRIPTABLE OBJECTS ####
 	     */
 
 	    
@@ -2186,7 +2219,8 @@ public class DevConsole : MonoBehaviour
 	    
 	    
 	    /*
-	     * TODO #### NUNMBERS AND OTHER ####
+	     * TODO
+	     * #### NUMBERS AND OTHER ####
 	     */
 
 	    else if (remaining_segments.Length > 0) {
@@ -2212,12 +2246,29 @@ public class DevConsole : MonoBehaviour
     }
 
 
+    // TODO this whole thing is kinda ugly
     void apply_selected_hint(ref string input, ReadOnlySpan<char> hint_segment, int next_idx) {
-	    ReadOnlySpan<char> segment_to_keep = input.AsSpan(0, input.Length - next_idx);
+	    int first_char_idx = first_character_idx(ref input);
+	    ReadOnlySpan<char> segment_to_keep = input.AsSpan(first_char_idx, next_idx);
 	    StringBuilder builder = new (segment_to_keep.Length + hint_segment.Length);
-	    builder.Append(segment_to_keep);
+	    builder.Append(segment_to_keep.TrimStart(CHAR.SPACE).TrimEnd(CHAR.SPACE));
+	    builder.Append(CHAR.SPACE);
 	    builder.Append(hint_segment);
+	    builder.Append(CHAR.SPACE);
 	    input = builder.ToString();
+    }
+
+    
+    int first_character_idx(ref string input) {
+	    int first_char = 0;
+	    for (int idx = 0; idx < input.Length; idx++) {
+		    if (input[idx] != CHAR.SPACE) {
+			    first_char = idx;
+			    break;
+		    }
+	    }
+
+	    return first_char;
     }
     
     
