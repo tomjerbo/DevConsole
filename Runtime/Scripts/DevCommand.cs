@@ -4,14 +4,14 @@ namespace Jerbo.DevConsole {
     
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Event)]
     public class DevCommand : Attribute {
-        public readonly string displayName;
+        public readonly string display_name;
 
         public DevCommand(string displayName) {
-            this.displayName = displayName.Replace(DevConsole.CHAR.SPACE, DevConsole.CHAR.EMPTY);
+            this.display_name = displayName.Replace(DevConsole.CHAR.SPACE, DevConsole.CHAR.EMPTY);
         }
         
         public DevCommand() {
-            displayName = string.Empty;
+            display_name = string.Empty;
         }
     }
 }
