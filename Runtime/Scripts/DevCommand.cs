@@ -2,7 +2,7 @@
 
 namespace Jerbo.DevConsole {
     
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Event)]
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Event)]
     public class DevCommand : Attribute {
         public readonly string display_name;
 

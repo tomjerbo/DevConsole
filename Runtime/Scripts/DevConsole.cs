@@ -16,6 +16,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Codice.CM.SEIDInfo;
 using UnityEngine.Rendering;
 using UnityEngine;
 using UnityEngine.Events;
@@ -202,7 +203,7 @@ public class DevConsole : MonoBehaviour
      * Core console functionality
      */
 
-    async void Awake() {
+     void Awake() {
         DontDestroyOnLoad(this);
         
         // Cache & Style gets assigned during build step!
@@ -212,7 +213,8 @@ public class DevConsole : MonoBehaviour
 #endif
 	    Debug.Log("loading commands - STARTED");
 	    Stopwatch sw = Stopwatch.StartNew();
-	    await Task.Run(load_dev_commands, destroyCancellationToken);
+	    // await Task.Run(load_dev_commands, destroyCancellationToken);
+	    load_dev_commands();
 	    sw.Stop();
 	    Debug.Log($"loading command - COMPLETED! -> {sw.ElapsedMilliseconds}ms");
     }
@@ -767,13 +769,14 @@ public class DevConsole : MonoBehaviour
     }
 
 
-	Task load_dev_commands() {
+	void load_dev_commands() {
 	     Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
 	     foreach (Assembly assembly in assemblies) {
 		     if (assembly.FullName.StartsWith("Assembly-CSharp", StringComparison.OrdinalIgnoreCase) ||
 		         assembly.FullName.StartsWith("Jerbo", StringComparison.OrdinalIgnoreCase)) {
 			     Type[] assembly_types = assembly.GetTypes();
 			     foreach (Type loaded_type in assembly_types) {
+				     
 				     MethodInfo[] methods_in_type = loaded_type.GetMethods(DEV_COMMAND_BINDING_FLAGS);
 				     foreach (MethodInfo method_info in methods_in_type) {
 					     DevCommand cmd = method_info.GetCustomAttribute<DevCommand>();
@@ -798,6 +801,23 @@ public class DevConsole : MonoBehaviour
 						     }
 					     }
 				     }
+				     
+				     
+				     PropertyInfo[] properties_in_type = loaded_type.GetProperties(DEV_COMMAND_BINDING_FLAGS);
+				     foreach (PropertyInfo prop_info in properties_in_type) {
+					     DevCommand cmd = prop_info.GetCustomAttribute<DevCommand>();
+					     if (cmd != null) { 
+						     dev_commands[active_cmd_count++].set_method(cmd, prop_info.SetMethod, loaded_type);
+					     }
+				     }
+
+				     // EventInfo[] events_in_type = loaded_type.GetEvents(DEV_COMMAND_BINDING_FLAGS);
+				     // foreach (EventInfo event_info in events_in_type) {
+					    //  DevCommand cmd = event_info.GetCustomAttribute<DevCommand>();
+					    //  if (cmd != null) { 
+						   //   dev_commands[active_cmd_count++].set_method(cmd, event_info.RaiseMethod, loaded_type);
+					    //  }
+				     // }
 			     }
 
 			     // Log($"--- <Assembly Commands ({assembly.GetName().Name}) : {active_cmd_count} > ---");
@@ -808,7 +828,7 @@ public class DevConsole : MonoBehaviour
 		     }
 	     }
 	    
-	    return Task.CompletedTask;
+	    // return Task.CompletedTask;
      }
     
     
@@ -930,21 +950,21 @@ public class DevConsole : MonoBehaviour
 
 			    // TODO applying history hint ?
 			    // apply hints
-			    bool insert_hint = (insert_hint_pressed || mouse_clicked_hint) && selected_hint_idx != -1 && parse_arg_result.num_hints > 0;
-			    if (insert_hint) {
+			    bool should_insert_hint = (insert_hint_pressed || mouse_clicked_hint) && selected_hint_idx != -1 && parse_arg_result.num_hints > 0;
+			    if (should_insert_hint) {
 				    if (selected_command_idx == -1) {
 					    if (console_state == console_input_state.COMMAND) {
 					    	string hint_text = dev_commands[hint_index[selected_hint_idx]].cmd_display_name;
 					    	string_section cmd_section_without_args = parse_string_for_section(ref hint_text, 0);
-					    	apply_selected_hint(ref console_input_text, hint_text.AsSpan(cmd_section_without_args.start_idx, cmd_section_without_args.length), 0, true);
+					    	insert_hint(ref console_input_text, hint_text.AsSpan(cmd_section_without_args.start_idx, cmd_section_without_args.length), 0, true);
 					    }
 					    else if (console_state == console_input_state.HISTORY) {
 						    ReadOnlySpan<char> hint_text = hint_content[selected_hint_idx].text.AsSpan();
-					    	apply_selected_hint(ref console_input_text, hint_text, 0, false);
+					    	insert_hint(ref console_input_text, hint_text, 0, false);
 					    }
 				    }
 				    else {
-					    apply_selected_hint(ref console_input_text, hint_content[selected_hint_idx].text.AsSpan(), parse_arg_result.next_idx, true);
+					    insert_hint(ref console_input_text, hint_content[selected_hint_idx].text.AsSpan(), parse_arg_result.next_idx, true);
 				    }
 				    selected_hint_idx = -1;
 					
@@ -987,7 +1007,8 @@ public class DevConsole : MonoBehaviour
 	     */
 	    
 	    GUI.backgroundColor = Color.clear;
-	    GUI.contentColor = Style.color_text_default;
+	    bool has_valid_command = selected_command_idx != -1 && parse_arg_result.valid_args >= dev_commands[selected_command_idx].num_args_required;
+	    GUI.contentColor = has_valid_command ? Style.color_text_valid_cmd : Style.color_text_default;
 	    input_field_rect.Set(
 		    input_field_background_rect.x + WIDTH_SPACING, 
 		    input_field_background_rect.y, 
@@ -1238,96 +1259,35 @@ public class DevConsole : MonoBehaviour
 	 //     * Draw Toast Messages
 	 //     */
   //
-	 //    if (ToastMessages.Count > 0) {
-  //
-		//     float maximumWidth = console_input_size.x;
-		//     float maxLines = console_input_draw_pos.y - Style.HintBoxBottomPadding - HEIGHT_SPACING * 2 -
-		//                      Style.HintBoxHeightOffset;
-		//     float heightPerLine = Style.ConsoleSkin.label.CalcSize(ToastMessages[0]).y;
-		//     int messagesToDraw = Mathf.Clamp(Mathf.RoundToInt(maxLines / heightPerLine), 1, ToastMessages.Count);
-		//     float maximumHeight = messagesToDraw * heightPerLine;
-  //
-  //
-  //
-		//     Rect toastWindow = new (inputFieldRect) {
-		// 	    width = maximumWidth,
-		// 	    height = maximumHeight + Style.HintBoxBottomPadding,
-		// 	    x = console_input_draw_pos.x,
-		// 	    y = console_input_draw_pos.y - Style.HintBoxBottomPadding - maximumHeight - Style.HintBoxHeightOffset,
-		//     };
-  //
-		//     GUI.backgroundColor = Style.BackgroundColor * 0.6f;
-		//     GUI.Box(toastWindow, string.Empty);
-  //
-		//     GUI.contentColor = Style.HintTextColorDefault;
-		//     Vector2 hintStartPos = toastWindow.position;
-		//     for (int i = 0; i < messagesToDraw; i++) {
-		// 	    Vector2 pos = hintStartPos + new Vector2(0, maximumHeight - (i + 1) * heightPerLine);
-		// 	    GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)),
-		// 		    ToastMessages[(messagesToDraw - 1) - i]);
-		//     }
+	    if (ToastMessages.Count > 0) {
+  
+		    float maximumWidth = input_field_background_rect.x;
+		    float maxLines = input_field_background_rect.y - 0 - HEIGHT_SPACING * 2 - 0;
+		    float heightPerLine = Style.ConsoleSkin.label.CalcSize(ToastMessages[0]).y;
+		    int messagesToDraw = Mathf.Clamp(Mathf.RoundToInt(maxLines / heightPerLine), 1, ToastMessages.Count);
+		    float maximumHeight = messagesToDraw * heightPerLine;
+  
+  
+  
+		    Rect toastWindow = new (input_field_rect) {
+			    width = maximumWidth,
+			    height = maximumHeight + 0,
+			    x = input_field_rect.x,
+			    y = input_field_rect.y - 0 - maximumHeight - 0,
+		    };
+  
+		    GUI.backgroundColor = Style.color_background * 0.6f;
+		    GUI.Box(toastWindow, string.Empty);
+  
+		    GUI.contentColor = Style.color_text_default;
+		    Vector2 hintStartPos = toastWindow.position;
+		    for (int i = 0; i < messagesToDraw; i++) {
+			    Vector2 pos = hintStartPos + new Vector2(0, maximumHeight - (i + 1) * heightPerLine);
+			    GUI.Label(new Rect(pos, new Vector2(maximumWidth, heightPerLine)),
+				    ToastMessages[(messagesToDraw - 1) - i]);
+		    }
+		}
 	 //    }
-  //
-  //
-  //
-  //
-  //
-	 //    /*
-	 //     * Draw argument hint box
-	 //     */
-	 //    if (inputCommand.commandIndex != -1) {
-		//     if (inputCommand.argumentCount < Commands[inputCommand.commandIndex].parameterCount) {
-		// 	    TextBuilder.Clear();
-		// 	    const string COLOR_END_TAG = "</color>";
-		// 	    string colorTag = $"<color=#{ColorUtility.ToHtmlStringRGBA(Style.InputArgumentTypeBorder)}>";
-		// 	    // int nameLenght = Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount].Length;
-		// 	    TextBuilder.Append(
-		// 		    $"({Commands[inputCommand.commandIndex].parameterNames[inputCommand.argumentCount]})");
-  //
-		// 	    GUIContent argumentHint = new (TextBuilder.ToString());
-		// 	    Vector2 argumentHintSize = Style.ConsoleSkin.label.CalcSize(argumentHint);
-		// 	    Rect argumentHintRect = new (inputFieldRect) {
-		// 		    x = inputFieldRect.x + Style.ConsoleSkin.textField.CalcSize(inputCommand.inputContent).x,
-		// 		    width = argumentHintSize.x,
-		// 	    };
-		// 	    argumentHintRect.position += new Vector2(Style.ArgHelpWidthPadding,
-		// 		    Style.ArgumentTypeBumpCurve.Evaluate(argumentHintBump) * Style.ArgHelpBumpOffsetAmount);
-  //
-		// 	    // Middle
-		// 	    // TextBuilder.Insert(nameLenght + 4, COLOR_END_TAG);
-		// 	    // TextBuilder.Insert(nameLenght + 3, colorTag);
-  //
-		// 	    // Start
-		// 	    TextBuilder.Insert(1, COLOR_END_TAG);
-		// 	    TextBuilder.Insert(0, colorTag);
-  //
-		// 	    // End
-		// 	    TextBuilder.Insert(TextBuilder.Length - 1, colorTag);
-		// 	    TextBuilder.Append(COLOR_END_TAG);
-  //
-  //
-		// 	    GUI.contentColor = Style.InputArgumentType;
-		// 	    argumentHint.text = TextBuilder.ToString();
-		// 	    GUI.Label(argumentHintRect, argumentHint);
-		//     }
-	 //    }
-  //
-	 //    /*
-	 //     * Set focus back to input field
-	 //     */
-  //
-	 //    if (setFocus > 0) {
-		//     --setFocus;
-		//     GUI.FocusControl(CONSOLE_INPUT_FIELD_ID);
-		//     inputCommand.Clear();
-	 //    }
-  //
-	 //    if (moveMarkerToEnd > 0) {
-		//     --moveMarkerToEnd;
-		//     TextEditor text = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
-		//     text.MoveTextEnd();
-	 //    }
-  //
   //   }
 	    #endregion
 		
@@ -1336,6 +1296,8 @@ public class DevConsole : MonoBehaviour
     
     void execute_command() {
 
+	    
+	    ToastMessages.Add(new GUIContent(console_input_text));
 	    dev_command cmd = dev_commands[selected_command_idx];
 	    int num_args = cmd.num_args;
 	    int num_valig_args = parse_arg_result.valid_args;
@@ -1366,7 +1328,7 @@ public class DevConsole : MonoBehaviour
 			        
 	    	    case dev_command.command_type.field:
 			        // TODO enum fields dont work
-			        cmd.field.SetValue(targets[idx], cmd_args);
+			        cmd.field.SetValue(targets[idx], num_args == 1 ? cmd_args[0] : cmd_args);
 			        break;
 			        
 	    	    case dev_command.command_type.action:
@@ -1406,6 +1368,7 @@ public class DevConsole : MonoBehaviour
 		    }
 	    }
 	    else {
+		    selected_command_idx = -1;
 		    parse_arg_result.num_hints = parse_for_command_hints(ref console_input_text, dev_commands);
 	    }
     }
@@ -1637,8 +1600,10 @@ public class DevConsole : MonoBehaviour
 			if (parse_result.valid_args == 0) {
 				break;
 			}
-     
-			if (arg_idx + 1 < command.num_args) {
+
+			// arg is only valid if you have a space afterward, not needed for last arg
+			bool not_last_arg = arg_idx + 1 < command.num_args; 
+			if (not_last_arg) {
 				if (parse_result.next_idx >= input.Length || input[parse_result.next_idx] != CHAR.SPACE) {
 					break;
 				}
@@ -1651,6 +1616,8 @@ public class DevConsole : MonoBehaviour
 		return parse_result;
 	}
          
+	
+	// having a bool that ignores the check is fucking stupid, but it's so convenient..
 	bool has_space_at_index(ref string input, int start_idx, bool must_have_space) {
 		if (must_have_space == false) {
 			return true;
@@ -1678,7 +1645,7 @@ public class DevConsole : MonoBehaviour
 		 */
         
 		if (arg_type == typeof(bool)) {
- 
+ 	
 			if (has_segments && has_space_at_index(ref input, remaining_segments[0].end, require_space_after_arg)) {
 				if (remaining_segments[0].length == bool.TrueString.Length) {
 					if (string.Compare(input, remaining_segments[0].start_idx, bool.TrueString, 0, remaining_segments[0].length, StringComparison.OrdinalIgnoreCase) == 0) 
@@ -1718,12 +1685,12 @@ public class DevConsole : MonoBehaviour
 					break;
 				}
 			}
- 
+ 	
 			if (show_hint_true) {
 				hint_content[parse_result.num_hints].text = bool.TrueString;
 				hint_value[parse_result.num_hints++]      = true;
 			}
- 
+ 	
 			if (show_hint_false) {
 				hint_content[parse_result.num_hints].text = bool.FalseString;
 				hint_value[parse_result.num_hints++]      = false;
@@ -1884,7 +1851,7 @@ public class DevConsole : MonoBehaviour
 
 
 	// TODO this whole thing is kinda ugly
-	void apply_selected_hint(ref string input, ReadOnlySpan<char> hint_segment, int next_idx, bool append_space) {
+	void insert_hint(ref string input, ReadOnlySpan<char> hint_segment, int next_idx, bool append_space) {
 		int first_char_idx = first_character_idx(ref input);
 		ReadOnlySpan<char> segment_to_keep = input.AsSpan(first_char_idx, next_idx);
 		StringBuilder builder = new (segment_to_keep.Length + hint_segment.Length);
@@ -2148,8 +2115,8 @@ public class DevConsole : MonoBehaviour
 			cmd_type = command_type.field;
 			field = field_info;
 			cmd_is_static = field.IsStatic;
-			target_type = found_on_type;
 			
+			target_type = found_on_type;
 			num_args = 1;
 			num_args_required = num_args;
 			arg_types = new Type[] { field.FieldType };
@@ -2164,8 +2131,8 @@ public class DevConsole : MonoBehaviour
 			cmd_type = command_type.action;
 			field = field_info;
 			cmd_is_static = field.IsStatic;
-			target_type = found_on_type;
 			
+			target_type = found_on_type;
 			num_args = 0;
 			num_args_required = num_args;
 			arg_types = Type.EmptyTypes;
@@ -2179,8 +2146,8 @@ public class DevConsole : MonoBehaviour
 			cmd_type = command_type.unity_event;
 			field = field_info;
 			cmd_is_static = field.IsStatic;
-			target_type = found_on_type;
 			
+			target_type = found_on_type;
 			num_args = 0;
 			num_args_required = num_args;
 			arg_types = Type.EmptyTypes;
