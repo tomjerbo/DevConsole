@@ -95,9 +95,6 @@ public class DevConsole : MonoBehaviour
      */
     
     
-    const BindingFlags BASE_FLAGS = BindingFlags.Default | BindingFlags.Public | BindingFlags.NonPublic;
-    const BindingFlags INSTANCED_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Instance;
-    const BindingFlags STATIC_BINDING_FLAGS = BASE_FLAGS | BindingFlags.Static;
     const BindingFlags DEV_COMMAND_BINDING_FLAGS = BindingFlags.Default | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
     /*
@@ -770,7 +767,7 @@ public class DevConsole : MonoBehaviour
     }
 
 
-     Task load_dev_commands() {
+	Task load_dev_commands() {
 	     Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
 	     foreach (Assembly assembly in assemblies) {
 		     if (assembly.FullName.StartsWith("Assembly-CSharp", StringComparison.OrdinalIgnoreCase) ||
@@ -1847,6 +1844,8 @@ public class DevConsole : MonoBehaviour
      	    
 			// check if valid arg
 			string[] enum_names = arg_type.GetEnumNames();
+			Array enum_values = arg_type.GetEnumValues();
+			
 			int length_of_match = -1;
 			int idx_best_match = -1;
  
@@ -1868,12 +1867,11 @@ public class DevConsole : MonoBehaviour
 			if (idx_best_match != -1) {
 				parse_result.next_idx = remaining_segments[0].start_idx + length_of_match;
 				parse_result.valid_args++;
-				arg_value[arg_idx] = enum_names[idx_best_match];
+				arg_value[arg_idx] = enum_values.GetValue(idx_best_match);
 			}
      	    
      	    
 			// get hints
-			Array enum_values = arg_type.GetEnumValues();
 			for (int enum_idx = 0; enum_idx < enum_names.Length; enum_idx++) { 
 				bool display_as_hint = true;
 				for (int section_idx = 0; section_idx < remaining_segments.Length; section_idx++) {
