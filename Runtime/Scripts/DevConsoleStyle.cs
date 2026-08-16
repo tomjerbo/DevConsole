@@ -10,30 +10,23 @@ namespace Jerbo.DevConsole {
         [SerializeField] public Vector2Int ConsoleIconFrames = new (4,1);
         [SerializeField] public float ConsolIconAnimSpeed = 1f;
         [SerializeField] public GUISkin ConsoleSkin;
+        [SerializeField] public bool show_icon = true;
         [SerializeField] public bool keepConsoleOpenAfterCommand;
         [SerializeField] public KeyCode[] openConsoleKey;
         
+        /*
+         * select #FFDB55
+         * bg #232F0E
+         */
         [Header("Console Colors")]
-        [SerializeField] public Color BackgroundColor = Color.white;
-        [SerializeField] public Color InputTextDefault = Color.white;
-        [SerializeField] public Color SelectedCommand = Color.white;
-        [SerializeField] public Color SelectedArgument = Color.white;
+        [SerializeField] public Color color_background = Color.white;
+        [SerializeField] public Color color_text_default = Color.white;
+        [SerializeField] public Color color_text_selected = Color.white;
+        [SerializeField] public Color color_text_valid_cmd = Color.white;
+        [SerializeField] public Color color_outline_macro = Color.white;
         
-        [Space(12)]
-        [SerializeField] public Color ValidCommand = Color.white;
-        [SerializeField] public Color InputArgumentType = Color.white;
-        [SerializeField] public Color InputArgumentTypeBorder = Color.white;
-        [SerializeField] public Color RecordMacroColor = Color.white;
-        
-        [Space(12)]
-        [SerializeField] public Color HintTextColorDefault = Color.white;
-        [SerializeField] public Color HintTextColorSelected = Color.white;
-
-
         [Header("Layout")]
-        [SerializeField] public float ConsoleTextSize = 36f;
-        [SerializeField] public float HintBoxBottomPadding = 6;
-        [SerializeField] public float HintBoxHeightOffset = 0;
+        [SerializeField] public float console_text_size = 26f;
         [SerializeField] public int ConsoleIconSize = 26;
         
         
