@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/tomjerbo/DevConsole/compare/v2.0.1...v2.0.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* rich text not supported on older unity versions ([a152fbd](https://github.com/tomjerbo/DevConsole/commit/a152fbd1747eedfb18163a823448eeeef5ac40c2))
+
 ## [2.0.1](https://github.com/tomjerbo/DevConsole/compare/v2.0.0...v2.0.1) (2026-08-17)
 
 
