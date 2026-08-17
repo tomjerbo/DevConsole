@@ -1,5 +1,5 @@
 #define URP_ENABLED
-#define DEVCONSOLE_DEBUG
+// #define DEVCONSOLE_DEBUG
 
 using System;
 using System.Collections.Generic;
@@ -695,9 +695,11 @@ public class DevConsole : MonoBehaviour
 	    Rect input_type_guide = new Rect(input_field_rect);
 	    input_type_guide.x += input_text_width + 2;
 	    input_type_guide.width -= input_text_width + 2;
-
+	    Color color_text_faded = Style.color_text_default;
+	    color_text_faded.a = 0.6f;
+	    GUI.contentColor = color_text_faded;
 	    if (selected_command_idx == -1) {
-			GUI.Label(input_type_guide, $"<size=100%><alpha=#66><DevCommand>");
+			GUI.Label(input_type_guide, $"<DevCommand>");
 	    }
 	    else {
 		    dev_command selected_command = dev_commands[selected_command_idx];
@@ -705,7 +707,7 @@ public class DevConsole : MonoBehaviour
 			    string arg_name = selected_command.arg_names[parse_arg_result.valid_args];
 			    Type arg_type = selected_command.arg_types[parse_arg_result.valid_args];
 			    
-				GUI.Label(input_type_guide, $"<size=100%><alpha=#66>{arg_name} <{arg_type.Name}>");
+				GUI.Label(input_type_guide, $"{arg_name} <{arg_type.Name}>");
 		    }
 	    }
 	    
