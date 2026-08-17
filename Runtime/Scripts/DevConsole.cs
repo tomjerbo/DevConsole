@@ -88,9 +88,11 @@ public class DevConsole : MonoBehaviour
     public const string DEV_CONSOLE_CACHE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleCache.asset";
     public const string DEV_CONSOLE_STYLE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleStyle.asset";
     public const string PLUGINS_FOLDER_PATH = "Assets/Plugins/DevConsole/";
-    const string HISTORY_COMMAND_FILE_VERSION = "FileVersion 0.1";
-    const string MACRO_COMMAND_FILE_VERSION = "FileVersion 0.1";
-
+    const string macro_version = nameof(save_version_history.init_history);
+    const string history_version = nameof(save_version_macros.init_macro);
+    
+    static readonly string path_history_cmd = Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
+    static readonly string path_macro_cmd = Path.Combine(Application.persistentDataPath, "DevConsole-Macros.txt");
     
     const string CONSOLE_INPUT_FIELD_ID = "Console Input Field";
     const int MAX_COMMANDS = 512;
@@ -104,8 +106,7 @@ public class DevConsole : MonoBehaviour
     
     public static bool is_console_open { get; private set; } // public so you can check it from the outside
     readonly StringBuilder text_builder = new (256);
-    string path_history_cmd => Path.Combine(Application.persistentDataPath, "DevConsole-CommandHistory.txt");
-    string path_macro_cmd => Path.Combine(Application.persistentDataPath, "DevConsole-Macros.txt");
+
     
     readonly List<GUIContent> toast_messages = new(MAX_TOAST_MESSAGES);
     readonly List<string> cmd_history = new (MAX_HISTORY);
@@ -173,7 +174,9 @@ public class DevConsole : MonoBehaviour
     public struct CHAR {
 	    internal const char SPACE = ' ';
 	    internal const char EMPTY = '\0';
+	    internal const char NEW_LINE = '\n';
 	    internal const char TAB = '\t';
+	    internal const char SEPERATOR = ';';
     }
     
     enum console_input_state {
@@ -186,6 +189,15 @@ public class DevConsole : MonoBehaviour
 	    keyboard,
 	    mouse
     }
+
+    enum save_version_history {
+	    init_history,
+	    LAST_VERSION_PLUS_ONE,
+    }
+    enum save_version_macros {
+	    init_macro,
+	    LAST_VERSION_PLUS_ONE,
+    }
     
     
 
@@ -196,9 +208,8 @@ public class DevConsole : MonoBehaviour
         Style = style;
     }
     
-	
 
-     async void Awake() {
+	async void Awake() {
         DontDestroyOnLoad(this);
         
         // Cache & Style gets assigned during build step!
@@ -211,15 +222,17 @@ public class DevConsole : MonoBehaviour
 	    await Task.WhenAll(
 		    Task.Run(load_dev_commands, destroyCancellationToken)
 		    , Task.Run(init_arrays, destroyCancellationToken)
-		    // , Task.Run(load_history_commands, destroyCancellationToken)
-		    // , Task.Run(load_macro_commands, destroyCancellationToken)
+		    , Task.Run(load_history_commands, destroyCancellationToken)
+		    , Task.Run(load_macro_commands, destroyCancellationToken)
 		    );
+	    
 	    reset_console_state();
 	    sw.Stop();
 	    Debug.Log($"loading command - COMPLETED! -> {sw.ElapsedMilliseconds}ms");
     }
+	
 
-    Task init_arrays() {
+	Task init_arrays() {
 	    for (int i = 0; i < hint_content.Length; i++) {
 		    hint_content[i] = new GUIContent();
 	    }
@@ -230,82 +243,41 @@ public class DevConsole : MonoBehaviour
     }
 
     void OnDestroy() {
-        SaveHistoryCommands();
-        SaveMacroCommands();
+		save_history_commands();
+        save_macro_commands();
         is_console_open = false;
     }
     
-    [DevCommand]
-    void SaveHistoryCommands() {
-        // TextBuilder.Clear();
-        // TextBuilder.EnsureCapacity(4096);
-        // TextBuilder.AppendLine(HISTORY_COMMAND_FILE_VERSION);
-        //
-        // foreach (HistoryCommand cmd in HistoryCommands) {
-        //     TextBuilder.AppendLine((cmd.argumentValues.Length + 2).ToString());
-        //     TextBuilder.AppendLine(cmd.displayString);
-        //     TextBuilder.AppendLine(cmd.commandDisplayName);
-        //     foreach (string argName in cmd.argumentDisplayName) {
-        //         TextBuilder.AppendLine(argName);
-        //     }
-        // }
-        //
-        // File.WriteAllText(path_history_cmd, TextBuilder.ToString());
+    async Task load_history_commands() {
+	    if (File.Exists(path_history_cmd)) {
+		    string[] history_commands = await File.ReadAllLinesAsync(path_history_cmd, destroyCancellationToken);
+		    
+		    // get version
+		    if (Enum.TryParse(history_commands[^1], out save_version_history version)) {
+			    Debug.Log($"history version -> {version}");
+			    
+			    // handle versioning when relevant
+		    }
+		    
+			cmd_history.AddRange(history_commands);
+			cmd_history.RemoveAt(history_commands.Length-1); // remove version line
+	    }
     }
-    
-    
-    Task load_history_commands() {
-	    
-	    
-        // if (File.Exists(path_history_cmd) == false) return;
-        
-        // HistoryCommands.Clear(); // only clear if it works?
-        // hasUnparsedHistoryCommands = false;
-        // string[] historyTextFile = File.ReadAllLines(path_history_cmd);
-        // if (historyTextFile[0] == HISTORY_COMMAND_FILE_VERSION) {
-        //     
-        // }
-        // else {
-        //     /*
-        //      * Handle versions
-        //      */
-        //     ClearCommandHistory();
-        //     Debug.LogError("Invalid version of CommandHistory save file found!");
-        //     // return;
-        // }
-        //
-        // int sliceStart = 1;
-        // int sliceEnd = historyTextFile.Length;
-        // ParseHistoryCommands(ref HistoryCommands, ref historyTextFile, sliceStart, sliceEnd);
-        // foreach (HistoryCommand cmd in HistoryCommands) {
-        //     if (cmd.historyCommandState != 2) {
-        //         hasUnparsedHistoryCommands = true;
-        //         break;
-        //     }
-        // }
 
-        return Task.CompletedTask;
+    void save_history_commands() {
+	    cmd_history.Add(macro_version);
+	    File.WriteAllLines(path_history_cmd, cmd_history);
     }
-    
-    /*
-     * Shortcuts
-     * Macros where you run a series of commands to record them onto a keycode
-     * StartMacro / EndMacro command
-     *
-     * AddShortcut taking in the key and what command
-     *
-     * Saving the argument
-     */
 
     [DevCommand]
-    void macro_start(KeyCode key, bool replace_if_keybind_is_in_use = false) {
+    void macro_start(KeyCode key, bool replace_existing = false) {
 	    if (macro_active.is_creating_macro) {
             return;
 	    }
 
         for (var idx = 0; idx < macro_commands.Count; idx++) {
             if (macro_commands[idx].keybind == key) {
-                if (replace_if_keybind_is_in_use) {
+                if (replace_existing) {
                     macro_commands.RemoveAt(idx);
                     break;
                 }
@@ -327,9 +299,11 @@ public class DevConsole : MonoBehaviour
 	    }
 	    
         if (macro_active.num_commands > 0) {
-	        macro_cmd macro = new ();
-	        macro.keybind = macro_active.keybind;
-	        macro.cmd_strings = macro_active.cmd_strings[..macro_active.num_commands];
+	        macro_cmd macro = new () {
+		        keybind = macro_active.keybind,
+		        cmd_strings = macro_active.cmd_strings[..macro_active.num_commands],
+		        num_commands = macro_active.num_commands,
+	        };
 	        macro_commands.Add(macro);
 			toast_messages.Add(new GUIContent($"Macro created: '{macro_active.keybind}' - {macro_active.num_commands} commands assigned."));
         }
@@ -340,66 +314,46 @@ public class DevConsole : MonoBehaviour
         macro_active.is_creating_macro = false;
     }
     
-    [DevCommand]
-    void SaveMacroCommands() {
-        // TextBuilder.Clear();
-        // TextBuilder.EnsureCapacity(4096);
-        // TextBuilder.AppendLine(MACRO_COMMAND_FILE_VERSION);
-        // int macroStartIndex = TextBuilder.Length;
-        //
-        // foreach (MacroCommand macroCommand in macroCommands) {
-        //     int lines = 0;
-        //     foreach (HistoryCommand cmd in macroCommand.commands) {
-        //         TextBuilder.AppendLine((cmd.argumentValues.Length + 2).ToString());
-        //         TextBuilder.AppendLine(cmd.displayString);
-        //         TextBuilder.AppendLine(cmd.commandDisplayName);
-        //         lines += 3;
-        //         foreach (string argName in cmd.argumentDisplayName) {
-        //             TextBuilder.AppendLine(argName);
-        //             ++lines;
-        //         }
-        //     }
-        //
-        //     lines += 2;
-        //     TextBuilder.Insert(macroStartIndex, $"{macroCommand.key}\n");
-        //     TextBuilder.Insert(macroStartIndex, $"{lines}\n");
-        //     macroStartIndex = TextBuilder.Length;
-        // }
-        //
-        // File.WriteAllText(path_macro_cmd, TextBuilder.ToString());
+    
+    void save_macro_commands() {
+	    text_builder.Clear();
+	    for (int idx = 0; idx < macro_commands.Count; idx++) {
+		    text_builder.Append(macro_commands[idx].keybind);
+			text_builder.Append(CHAR.SEPERATOR);
+			text_builder.AppendJoin(CHAR.SEPERATOR, macro_commands[idx].cmd_strings);
+			text_builder.Append(CHAR.NEW_LINE);
+	    }
+	    
+	    text_builder.AppendLine(history_version);
+	    File.WriteAllText(path_macro_cmd, text_builder.ToString());
     }
     
-    Task load_macro_commands() {
-        // if (File.Exists(path_macro_cmd) == false) return;
-        //
-        // macro_commands.Clear(); // only clear if it works?
-        // string[] historyTextFile = File.ReadAllLines(path_macro_cmd);
-        // if (historyTextFile[0] == MACRO_COMMAND_FILE_VERSION) {
-        //     
-        // }
-        // else {
-        //     /*
-        //      * Handle versions
-        //      */
-        //     ClearAllMacros();
-        //     Debug.LogError("Invalid version of MacroCommand save file found!");
-        //     return;
-        // }
-        //
-        // int i = 1;
-        // while (i < historyTextFile.Length) {
-        //     int lines = int.Parse(historyTextFile[i]);
-        //     macro_cmd macro_cmd = new macro_cmd {
-        //         key = Enum.Parse<KeyCode>(historyTextFile[i+1])
-        //     };
-        //     int sliceStart = i + 2;
-        //     int sliceEnd = i + lines;
-        //     ParseHistoryCommands(ref macro_cmd.cmd_strings, ref historyTextFile, sliceStart, sliceEnd);
-        //     macro_commands.Add(macro_cmd);
-        //     i += lines;
-        // }
-
-        return Task.CompletedTask;
+    async Task load_macro_commands() {
+	    if (File.Exists(path_macro_cmd)) {
+		    string[] saved_macro_lines = await File.ReadAllLinesAsync(path_macro_cmd, destroyCancellationToken);
+		    
+		    if (Enum.TryParse(saved_macro_lines[^1], out save_version_macros version)) {
+			    Debug.Log($"Macro version -> {version}");
+			    // handle versioning when relevant
+		    }
+		    
+		    // skip version tag on last line
+			int num_required_parts_for_macro = 2;
+		    for (int idx = 0; idx < saved_macro_lines.Length - 1; idx++) {
+			    string[] macro_parts = saved_macro_lines[idx].Split(CHAR.SEPERATOR);
+			    
+			    if (macro_parts != null && macro_parts.Length >= num_required_parts_for_macro) {
+				    if (Enum.TryParse(macro_parts[0], out KeyCode keybind)) {
+						macro_cmd macro = new () {
+							keybind = keybind,
+							num_commands = macro_parts.Length - 1,
+							cmd_strings = macro_parts[1..],
+						};
+						macro_commands.Add(macro);
+				    }
+			    }
+		    }
+	    }
     }
 
     [DevCommand]
@@ -1046,10 +1000,8 @@ public class DevConsole : MonoBehaviour
 	    int num_valid_args = parse_arg_result.valid_args;
 
 	    bool execute_command = true;
-	    if (string.Compare(cmd.cmd_display_name, nameof(macro_end), StringComparison.OrdinalIgnoreCase) == 0) {
-		    execute_command = false;
-	    } 
-	    else if (macro_active.is_creating_macro) {
+	    
+	    if (macro_active.is_creating_macro && string.Compare(cmd.cmd_display_name, nameof(macro_end), StringComparison.OrdinalIgnoreCase) != 0) {
 		    macro_active.cmd_strings[macro_active.num_commands++] = console_input_text;
 		    execute_command = false;
 	    } 
@@ -1116,6 +1068,9 @@ public class DevConsole : MonoBehaviour
     }
 
     void parse_input_string() {
+	    int selected_cmd_before = selected_command_idx;
+	    int valid_args_before = parse_arg_result.valid_args;
+	    
 	    string_section cmd_section = parse_string_for_section(ref console_input_text, 0);
 	    selected_command_idx = parse_for_command(ref console_input_text, ref cmd_section, dev_commands, num_commands);
 	    if (selected_command_idx != -1 && has_space_at_index(ref console_input_text, cmd_section.end, true)) {
@@ -1127,6 +1082,10 @@ public class DevConsole : MonoBehaviour
 	    else {
 		    selected_command_idx = -1;
 		    parse_arg_result.num_hints = parse_for_command_hints(ref console_input_text, dev_commands, num_commands);
+	    }
+
+	    if (selected_cmd_before != selected_command_idx || valid_args_before != parse_arg_result.valid_args) {
+		    selected_hint_idx = -1;
 	    }
     }
 
