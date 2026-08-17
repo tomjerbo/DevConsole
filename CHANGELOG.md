@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/tomjerbo/DevConsole/compare/v2.0.0...v2.0.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* applied style changes ([f335432](https://github.com/tomjerbo/DevConsole/commit/f335432ca8a877277d6ca78f641dd0b0d5debee2))
+
 # [2.0.0](https://github.com/tomjerbo/DevConsole/compare/v1.0.6...v2.0.0) (2026-08-17)
 
 
