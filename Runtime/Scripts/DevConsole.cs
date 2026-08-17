@@ -1,10 +1,5 @@
-/*
- * Enable this for projects with URP
- */
-
 // #define URP_ENABLED
 #define DEVCONSOLE_DEBUG
-
 
 using System;
 using System.Collections.Generic;
@@ -21,9 +16,9 @@ using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
 
-
 /* 
- * TODO Rework ====
+ * TODO
+ * === Rework ====
  *
  * Optional placement of having it on the top vs bottom of screen? help menu adjusted accordingly both visually and index wise with directional inputs
  * scrolling through history commands should replace input text field to it's quick to select+use, maybe same for hints?
@@ -383,8 +378,10 @@ public class DevConsole : MonoBehaviour
     void console_open() {
         is_console_open = true;
         reset_console_state();
-        
-        // DebugManager.instance.enableRuntimeUI = false;
+
+#if URP_ENABLED
+	    UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = false;
+#endif
     }
     
     void console_close() {
@@ -392,7 +389,9 @@ public class DevConsole : MonoBehaviour
         macro_end();
         GUI.FocusControl(null);
         
-        // DebugManager.instance.enableRuntimeUI = true;
+#if URP_ENABLED
+        UnityEngine.Rendering.DebugManager.instance.enableRuntimeUI = true;
+#endif
     }
 
     void OnGUI() {
