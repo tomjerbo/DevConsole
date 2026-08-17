@@ -2,7 +2,8 @@
     "name": "Jerbo.DevConsole",
     "rootNamespace": "Jerbo.DevConsole",
     "references": [
-        "Jerbo.Inpector"
+        "Jerbo.Inpector",
+        "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
