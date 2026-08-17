@@ -1,5 +1,5 @@
 #define URP_ENABLED
-// #define DEVCONSOLE_DEBUG
+#define DEVCONSOLE_DEBUG
 
 using System;
 using System.Collections.Generic;
@@ -399,12 +399,12 @@ public class DevConsole : MonoBehaviour
         Event input_event = Event.current;
         if (is_console_open == false) {
             KeyCode[] open_console_keys = Style != null ? Style.openConsoleKey : Array.Empty<KeyCode>();
-            if (input_event.OpenConsole(overrideKeys:open_console_keys)) {
+            if (input_event.open_console(overrideKeys:open_console_keys)) {
                 console_open();
             }
             else {
                 foreach (macro_cmd macro in macro_commands) {
-                    if (input_event.KeyDown(macro.keybind)) {
+                    if (input_event.key_down(macro.keybind)) {
                         foreach (string cmd in macro.cmd_strings) {
 
 	                        console_input_text = cmd;
@@ -427,7 +427,7 @@ public class DevConsole : MonoBehaviour
          */
 
 
-        if (input_event.CloseConsole()) {
+        if (input_event.close_console()) {
             console_close();
         }
         else {
@@ -529,10 +529,10 @@ public class DevConsole : MonoBehaviour
 	    }
 	    
 	    bool mouse_clicked_hint = parse_arg_result.num_hints > 0 && mouse_pos.inside(hint_background_rect.min, hint_background_rect.max) && input_event.mouse_down(KeyCode.Mouse0, false);
-	    bool insert_hint_pressed = input_event.InsertHint(false);
+	    bool insert_hint_pressed = input_event.insert_hint(false);
 	    
-	    bool up = input_event.NavigateUp();
-	    bool down = input_event.NavigateDown();
+	    bool up = input_event.navigate_up();
+	    bool down = input_event.navigate_down();
 	    switch (console_state) {
 		    case console_input_state.waiting_for_input:
 			    if (up || down) {
@@ -574,7 +574,7 @@ public class DevConsole : MonoBehaviour
 
 			    
 			    // execute command
-			    bool execute_cmd_pressed = input_event.ExecuteCommand(false);
+			    bool execute_cmd_pressed = input_event.execute_command(false);
 			    if (execute_cmd_pressed && selected_hint_idx == -1 && selected_command_idx != -1 && parse_arg_result.valid_args >= dev_commands[selected_command_idx].num_args_required) {
 				    input_event.Use();
 				    execute_command();
@@ -1007,6 +1007,8 @@ public class DevConsole : MonoBehaviour
 	    if (selected_cmd_before != selected_command_idx || valid_args_before != parse_arg_result.valid_args) {
 		    selected_hint_idx = -1;
 	    }
+
+	    selected_hint_idx = Mathf.Clamp(selected_hint_idx, -1, parse_arg_result.num_hints-1);
     }
 
 	string_section parse_string_for_section(ref string input_string, int start_idx) {

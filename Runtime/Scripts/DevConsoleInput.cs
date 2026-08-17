@@ -4,7 +4,7 @@ namespace Jerbo.DevConsole {
     public static class DevConsoleInput
     {
 
-        public static bool KeyUp(this Event e, KeyCode key, bool useOnTrue = true) {
+        public static bool key_up(this Event e, KeyCode key, bool useOnTrue = true) {
             if (e.isKey && e.keyCode == key && e.type == EventType.KeyUp) {
                 if (useOnTrue) e.Use();
                 return true;
@@ -13,7 +13,7 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool KeyDown(this Event e, KeyCode key, bool useOnTrue = true) {
+        public static bool key_down(this Event e, KeyCode key, bool useOnTrue = true) {
             if (e.isKey && e.keyCode == key && e.type == EventType.KeyDown) {
                 if (useOnTrue) e.Use();
                 return true;
@@ -40,7 +40,7 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool ExecuteCommand(this Event e, bool useOnSuccess = true) {
+        public static bool execute_command(this Event e, bool useOnSuccess = true) {
             if (e.isKey && e.type == EventType.KeyDown) {
                 foreach (KeyCode key in EXECUTE_COMMAND) {
                     if (e.keyCode != key) continue;
@@ -53,8 +53,8 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool CloseConsole(this Event e, bool useOnSuccess = true) {
-            if (e.isKey && e.type == EventType.KeyDown) {
+        public static bool close_console(this Event e, bool useOnSuccess = true) {
+            if (e.isKey && e.type == EventType.KeyUp) {
                 foreach (KeyCode key in CLOSE_CONSOLE) {
                     if (e.keyCode != key) continue;
                     
@@ -66,7 +66,7 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool OpenConsole(this Event e, bool useOnSuccess = true, params KeyCode[] overrideKeys) {
+        public static bool open_console(this Event e, bool useOnSuccess = true, params KeyCode[] overrideKeys) {
             if (e.isKey && e.type == EventType.KeyUp) {
                 if (overrideKeys != null && overrideKeys.Length > 0) {
                     foreach (KeyCode key in overrideKeys) {
@@ -90,7 +90,7 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool InsertHint(this Event e, bool useOnSuccess = true) {
+        public static bool insert_hint(this Event e, bool useOnSuccess = true) {
             if (e.isKey && e.type == EventType.KeyDown) {
                 foreach (KeyCode key in INSERT_HINT) {
                     if (e.keyCode != key) continue;
@@ -103,7 +103,7 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool NavigateUp(this Event e, bool useOnSuccess = true) {
+        public static bool navigate_up(this Event e, bool useOnSuccess = true) {
             if (e.isKey && e.type == EventType.KeyDown) {
                 foreach (KeyCode key in NAVIGATE_UP) {
                     if (e.keyCode != key) continue;
@@ -116,7 +116,7 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool NavigateDown(this Event e, bool useOnSuccess = true) {
+        public static bool navigate_down(this Event e, bool useOnSuccess = true) {
             if (e.isKey && e.type == EventType.KeyDown) {
                 foreach (KeyCode key in NAVIGATE_DOWN) {
                     if (e.keyCode != key) continue;
@@ -129,7 +129,7 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
-        public static bool Backspace(this Event e, bool useOnSuccess = true) {
+        public static bool backspace(this Event e, bool useOnSuccess = true) {
             if (e.isKey && e.type == EventType.KeyDown && e.keyCode == BACKSPACE) {
                 if (useOnSuccess) e.Use();
                 return true;
