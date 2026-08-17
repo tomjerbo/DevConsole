@@ -63,7 +63,6 @@ public class DevConsole : MonoBehaviour
     
     
     const BindingFlags DEV_COMMAND_BINDING_FLAGS = BindingFlags.Default | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
-
     public const string DEV_CONSOLE_SKIN_PATH = PLUGINS_FOLDER_PATH + "DevConsoleSkin.asset";
     public const string DEV_CONSOLE_CACHE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleCache.asset";
     public const string DEV_CONSOLE_STYLE_PATH = PLUGINS_FOLDER_PATH + "DevConsoleStyle.asset";
@@ -183,7 +182,7 @@ public class DevConsole : MonoBehaviour
 
     [SerializeField] DevConsoleCache Cache;
     [SerializeField] DevConsoleStyle Style;
-    public void SetupRefsForBuild(DevConsoleCache cache, DevConsoleStyle style) {
+    public void assign_refs_for_build(DevConsoleCache cache, DevConsoleStyle style) {
         Cache = cache;
         Style = style;
     }
