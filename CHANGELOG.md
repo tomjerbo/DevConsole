@@ -1,3 +1,13 @@
+# [2.0.0](https://github.com/tomjerbo/DevConsole/compare/v1.0.6...v2.0.0) (2026-08-17)
+
+
+* BREAKING CHANGE: urp fix ([fef8c3e](https://github.com/tomjerbo/DevConsole/commit/fef8c3e8ae2dac16968682e22c59e3069b5eaa05))
+
+
+### BREAKING CHANGES
+
+* urp fix
+
 ## [1.0.6](https://github.com/tomjerbo/DevConsole/compare/v1.0.5...v1.0.6) (2026-08-17)
 
 
