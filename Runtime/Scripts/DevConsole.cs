@@ -197,11 +197,12 @@ public class DevConsole : MonoBehaviour
         Cache = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleCache>(DEV_CONSOLE_CACHE_PATH);
         Style = UnityEditor.AssetDatabase.LoadAssetAtPath<DevConsoleStyle>(DEV_CONSOLE_STYLE_PATH);
 #endif
+		init_arrays();
+		
 	    Debug.Log("loading commands - STARTED");
 	    Stopwatch sw = Stopwatch.StartNew();
 	    await Task.WhenAll(
-		    Task.Run(load_dev_commands, destroyCancellationToken)
-		    , Task.Run(init_arrays, destroyCancellationToken)
+		      Task.Run(load_dev_commands, destroyCancellationToken)
 		    , Task.Run(load_history_commands, destroyCancellationToken)
 		    , Task.Run(load_macro_commands, destroyCancellationToken)
 		    );
@@ -211,15 +212,12 @@ public class DevConsole : MonoBehaviour
 	    Debug.Log($"loading command - COMPLETED! -> {sw.ElapsedMilliseconds}ms");
     }
 	
-
-	Task init_arrays() {
+	void init_arrays() {
 	    for (int i = 0; i < hint_content.Length; i++) {
 		    hint_content[i] = new GUIContent();
 	    }
 
 	    macro_active.cmd_strings = new string[32];
-
-	    return Task.CompletedTask;
     }
 
     void OnDestroy() {
