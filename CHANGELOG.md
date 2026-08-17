@@ -1,3 +1,10 @@
+## [1.0.6](https://github.com/tomjerbo/DevConsole/compare/v1.0.5...v1.0.6) (2026-08-17)
+
+
+### Bug Fixes
+
+* init array normal method ([cd4c653](https://github.com/tomjerbo/DevConsole/commit/cd4c65393efa996955f77ea5166273303c59d14f))
+
 ## [1.0.5](https://github.com/tomjerbo/DevConsole/compare/v1.0.4...v1.0.5) (2025-11-11)
 
 
