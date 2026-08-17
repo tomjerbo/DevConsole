@@ -20,34 +20,14 @@ using Application = UnityEngine.Application;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
-/*
- * ----------- TODO LIST ----------------
- * Check how generic parameters are handled
- * Check how override methods are handled
- * Add toast menu for executed commands
- * URP define easily editable, want to have a settings object with a bool
- * Cache not being saved between sessions when stored in package folder, create folder for assets
- * inside Assets/Plugins to store in
- * 
- * Load/Save location for builds is not the same as editor
- *
- */
-
 
 
 /* 
  * TODO Rework ====
  *
- * Custom parsing for savefiles with named values, maybe use something like json, must be tiny and without external dependencies!
- * Treat input as string always, having to select the command/argument is very tedious, editing text is much faster to use
  * Optional placement of having it on the top vs bottom of screen? help menu adjusted accordingly both visually and index wise with directional inputs
- * Toast menu to show output & messages, clear command
  * scrolling through history commands should replace input text field to it's quick to select+use, maybe same for hints?
  * Look into using my ui system for handling navigation
- *
- *
- *
- * have toggle for displaying arguments in hint view, when in command mode
  */
 
 namespace Jerbo.DevConsole
@@ -314,7 +294,6 @@ public class DevConsole : MonoBehaviour
         macro_active.is_creating_macro = false;
     }
     
-    
     void save_macro_commands() {
 	    text_builder.Clear();
 	    for (int idx = 0; idx < macro_commands.Count; idx++) {
@@ -377,21 +356,14 @@ public class DevConsole : MonoBehaviour
 
     [DevCommand]
     void macro_display(bool only_print_keybinds = false) {
-	    
-        // foreach (MacroCommand macroCommand in macroCommands) {
-        //     Debug.Log($"Macro -> ({macroCommand.key})");
-        //     if (printCommandNames == false)
-        //         continue;
-        //     foreach (HistoryCommand command in macroCommand.commands) {
-        //         if (command.historyCommandState == 2) {
-        //             Debug.Log($"Command: {command.commandDisplayName}");
-        //         }
-        //         else {
-        //             Debug.Log($"Command [Not Parsed]: '{command.displayString}'");
-        //         }
-        //     }
-        //     Debug.Log("------");
-        // }
+	    for (int idx = 0; idx < macro_commands.Count; idx++) {
+		    toast_messages.Add(new GUIContent($"Keybind: {macro_commands[idx].keybind}"));
+		    if (only_print_keybinds == false) {
+			    for (int cmd_idx = 0; cmd_idx < macro_commands[idx].num_commands; cmd_idx++) {
+					toast_messages.Add(new GUIContent($"{CHAR.TAB}{macro_commands[idx].cmd_strings[cmd_idx]}"));
+			    }
+		    }
+	    }
     }
 
     [DevCommand]
@@ -425,10 +397,6 @@ public class DevConsole : MonoBehaviour
         
         // DebugManager.instance.enableRuntimeUI = true;
     }
-    
-    /*
-    * Main logic flow
-    */
 
     void OnGUI() {
         Event input_event = Event.current;
@@ -470,14 +438,6 @@ public class DevConsole : MonoBehaviour
 	        draw_console_window(input_event);
         }
     }
-
-	
-
-    /*
-     * TODO
-     * #### THIS IS THE UP TO DATE STUFF ####
-     */
-    
     
     void reset_console_state() {
 	    parse_arg_result.reset();
@@ -487,8 +447,7 @@ public class DevConsole : MonoBehaviour
 	    console_state = console_input_state.waiting_for_input;
 	    current_device = device.keyboard;
     }
-
-
+	
 	Task load_dev_commands() {
 	     Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
 	     foreach (Assembly assembly in assemblies) {
@@ -562,43 +521,6 @@ public class DevConsole : MonoBehaviour
 	    selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectHintBumpSpeed * Time.unscaledDeltaTime);
 	    argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgHelpBumpSpeed * Time.unscaledDeltaTime);
 	    
-
-
-
-	    /*
-	     * Commands are always treated as raw strings!
-	     *
-	     *
-	     * States:
-	     *	History
-	     *	Writing
-	     *
-	     * History:
-	     *	display list of history commands
-	     *	immediately replace input string with history value, allowing 'arrow up -> enter' to quickly execute command
-	     *
-	     * Writing:
-	     *  start with saving a copy of the input string, find matching command,
-	     *		if found skip forward to after the commands length and parse arguments,
-	     *		for each argument found, skip forward again and repeat.
-	     *		if no full match is found, show suggestions in order of best->worst match.
-	     *		early out for argument hints if string is empty, accept 'default/null'
-	     *	Match start of input string vs command names
-	     *	if match found, save index to command and start index of arguments in input string
-	     *	step through input string and try and match arguments, if fail, return what argument index to gather hints for
-	     *
-	     */
-	    
-
-	    
-
-	    
-	    
-	    
-	    /*
-	     * if user tries to navigate up or down, intention is to scroll through history
-	     * enter history state and start displaying history with first history selected
-	     */
 	    
 	    
 	    if (input_event.isKey) {
@@ -667,8 +589,7 @@ public class DevConsole : MonoBehaviour
 				    return;
 			    }
 			    
-
-			    // TODO applying history hint ?
+			    
 			    // apply hints
 			    bool should_insert_hint = (insert_hint_pressed || mouse_clicked_hint) && selected_hint_idx != -1 && parse_arg_result.num_hints > 0;
 			    if (should_insert_hint) {
@@ -1091,8 +1012,7 @@ public class DevConsole : MonoBehaviour
 
 	string_section parse_string_for_section(ref string input_string, int start_idx) {
 		string_section section = new (); 
-
-		// TODO can be clearer
+		
 		for (int idx = start_idx; idx < input_string.Length; idx++) {
 			if (section.found_start == false && input_string[idx] != CHAR.SPACE) {
 				section.start_idx = idx;
@@ -1158,8 +1078,7 @@ public class DevConsole : MonoBehaviour
 		return count;
 	}
     
-    
-	// TODO can make methods that gets start & length of cmd/arg string
+	
 	int parse_for_command(ref string input, ref string_section section, dev_command[] commands, int num_commands) {
 		int command_idx = -1;
 	    
@@ -1510,7 +1429,6 @@ public class DevConsole : MonoBehaviour
 		public int num_args_required;
 		public string[] arg_names;
 		public Type[] arg_types;
-		public bool[] arg_has_default;
 		public object[] arg_default_value;
 		public bool cmd_is_static;
 		public command_type cmd_type;
@@ -1540,7 +1458,6 @@ public class DevConsole : MonoBehaviour
 			num_args_required = num_args;
 			arg_types = new Type[num_args];
 			arg_names = new string[num_args];
-			arg_has_default = new bool[num_args];
 			arg_default_value = new object[num_args];
 
 
@@ -1552,7 +1469,6 @@ public class DevConsole : MonoBehaviour
 				
 				arg_types[i] = param.ParameterType;
 				arg_names[i] = param.Name;
-				arg_has_default[i] = param.HasDefaultValue;
 				arg_default_value[i] = param.DefaultValue;
 				
 				if (param.HasDefaultValue) {
