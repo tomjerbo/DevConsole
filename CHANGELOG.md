@@ -1,3 +1,10 @@
+## [2.0.3](https://github.com/tomjerbo/DevConsole/compare/v2.0.2...v2.0.3) (2026-08-18)
+
+
+### Bug Fixes
+
+* mouse scroll & cleanup ([84fa1cb](https://github.com/tomjerbo/DevConsole/commit/84fa1cbc3ed29c623f8993546b77511129788e60))
+
 ## [2.0.2](https://github.com/tomjerbo/DevConsole/compare/v2.0.1...v2.0.2) (2026-08-17)
 
 
