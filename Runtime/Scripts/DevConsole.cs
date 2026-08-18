@@ -115,10 +115,10 @@ public class DevConsole : MonoBehaviour
     Vector2 mouse_pos;
     
     // TODO animations
-    float selectionBump;
-    float argumentHintBump;
+    float selection_bump;
+    float argument_hint_bump;
     
-    GUIStyle box_border_skin() => Style.ConsoleSkin.customStyles[0];
+    GUIStyle box_border_skin() => Style.console_skin.customStyles[0];
     
     struct parse_arg {
 	    public int valid_args;
@@ -146,12 +146,11 @@ public class DevConsole : MonoBehaviour
 	    public string[] cmd_strings;
     }
     
-    public struct CHAR {
-	    internal const char SPACE = ' ';
-	    internal const char EMPTY = '\0';
-	    internal const char NEW_LINE = '\n';
-	    internal const char TAB = '\t';
-	    internal const char SEPERATOR = ';';
+    struct CHAR {
+	    public const char SPACE = ' ';
+	    public const char NEW_LINE = '\n';
+	    public const char TAB = '\t';
+	    public const char SEPARATOR = ';';
     }
     
     enum console_input_state {
@@ -175,7 +174,123 @@ public class DevConsole : MonoBehaviour
     }
     
     
+    struct dev_command {
+		public string cmd_display_name;
+		public string hint_text;
+		public int num_args;
+		public int num_args_required;
+		public string[] arg_names;
+		public Type[] arg_types;
+		public object[] arg_default_value;
+		public bool cmd_is_static;
+		public bool close_after_use;
+		public command_type cmd_type;
+		public MethodInfo method;
+		public FieldInfo field;
+		public Type target_type;
+		
 
+		public enum command_type {
+			method,
+			field,
+			action,
+			unity_event,
+		}
+
+		public void set_method(DevCommand command, MethodInfo method_info, Type found_on_type, StringBuilder builder) {
+			cmd_type = command_type.method;
+			method = method_info;
+			cmd_is_static = method.IsStatic;
+			target_type = found_on_type;
+			
+			cmd_display_name = string.IsNullOrEmpty(command.display_name) ? method.Name : command.display_name;
+			close_after_use = command.close_after_use;
+			
+			ParameterInfo[] args = method.GetParameters();
+			num_args = args.Length;
+			num_args_required = num_args;
+			arg_types = new Type[num_args];
+			arg_names = new string[num_args];
+			arg_default_value = new object[num_args];
+
+
+			builder.Clear();
+			builder.Append($"{cmd_display_name} ");
+			for (int i = 0; i < args.Length; i++) {
+				ParameterInfo param = args[i];
+				builder.Append($"<{param.Name}> ");
+				
+				arg_types[i] = param.ParameterType;
+				arg_names[i] = param.Name;
+				arg_default_value[i] = param.DefaultValue;
+				
+				if (param.HasDefaultValue) {
+					num_args_required--;
+				}
+			}
+
+			hint_text = builder.ToString();
+		}
+		
+		public void set_field(DevCommand command, FieldInfo field_info, Type found_on_type) {
+			cmd_type = command_type.field;
+			field = field_info;
+			cmd_is_static = field.IsStatic;
+			close_after_use = command.close_after_use;
+			
+			target_type = found_on_type;
+			num_args = 1;
+			num_args_required = num_args;
+			arg_types = new Type[] { field.FieldType };
+			arg_names = new string[]{ field.Name };
+			
+			
+			cmd_display_name = string.IsNullOrEmpty(command.display_name) ? field.Name : command.display_name;
+			hint_text = $"{cmd_display_name} <{field.Name}>";
+		}
+
+		public void set_action(DevCommand command, FieldInfo field_info, Type found_on_type) {
+			cmd_type = command_type.action;
+			field = field_info;
+			cmd_is_static = field.IsStatic;
+			close_after_use = command.close_after_use;
+			
+			target_type = found_on_type;
+			num_args = 0;
+			num_args_required = num_args;
+			arg_types = Type.EmptyTypes;
+			arg_names = Array.Empty<string>();
+			
+			cmd_display_name = string.IsNullOrEmpty(command.display_name) ? field.Name : command.display_name;
+			hint_text = $"{cmd_display_name}";
+		}
+		
+		public void set_unity_event(DevCommand command, FieldInfo field_info, Type found_on_type) {
+			cmd_type = command_type.unity_event;
+			field = field_info;
+			cmd_is_static = field.IsStatic;
+			close_after_use = command.close_after_use;
+			
+			target_type = found_on_type;
+			num_args = 0;
+			num_args_required = num_args;
+			arg_types = Type.EmptyTypes;
+			arg_names = Array.Empty<string>();
+			
+			cmd_display_name = string.IsNullOrEmpty(command.display_name) ? field.Name : command.display_name;
+			hint_text = $"{cmd_display_name}";
+		}
+	}
+    
+    
+
+    /*
+     * 
+     * TODO
+     * ========= RUNTIME REFERENCES =========
+     * 
+     */
+    
     [SerializeField] DevConsoleCache Cache;
     [SerializeField] DevConsoleStyle Style;
     public void assign_refs_for_build(DevConsoleCache cache, DevConsoleStyle style) {
@@ -291,8 +406,8 @@ public class DevConsole : MonoBehaviour
 	    text_builder.Clear();
 	    for (int idx = 0; idx < macro_commands.Count; idx++) {
 		    text_builder.Append(macro_commands[idx].keybind);
-			text_builder.Append(CHAR.SEPERATOR);
-			text_builder.AppendJoin(CHAR.SEPERATOR, macro_commands[idx].cmd_strings);
+			text_builder.Append(CHAR.SEPARATOR);
+			text_builder.AppendJoin(CHAR.SEPARATOR, macro_commands[idx].cmd_strings);
 			text_builder.Append(CHAR.NEW_LINE);
 	    }
 	    
@@ -312,7 +427,7 @@ public class DevConsole : MonoBehaviour
 		    // skip version tag on last line
 			int num_required_parts_for_macro = 2;
 		    for (int idx = 0; idx < saved_macro_lines.Length - 1; idx++) {
-			    string[] macro_parts = saved_macro_lines[idx].Split(CHAR.SEPERATOR);
+			    string[] macro_parts = saved_macro_lines[idx].Split(CHAR.SEPARATOR);
 			    
 			    if (macro_parts != null && macro_parts.Length >= num_required_parts_for_macro) {
 				    if (Enum.TryParse(macro_parts[0], out KeyCode keybind)) {
@@ -328,7 +443,7 @@ public class DevConsole : MonoBehaviour
 	    }
     }
 
-    [DevCommand]
+    [DevCommand(false)]
     void macro_clear_all() {
 	    if (macro_commands.Count > 0) {
 	        toast_messages.Add(new GUIContent($"Removed {macro_commands.Count} macros"));
@@ -336,7 +451,7 @@ public class DevConsole : MonoBehaviour
 	    }
     }
     
-    [DevCommand]
+    [DevCommand(false)]
     void macro_remove(KeyCode key) {
         for (int i = macro_commands.Count - 1; i >= 0; i--) {
             if (macro_commands[i].keybind == key) {
@@ -347,7 +462,7 @@ public class DevConsole : MonoBehaviour
         }
     }
 
-    [DevCommand]
+    [DevCommand(false)]
     void macro_display(bool only_print_keybinds = false) {
 	    for (int idx = 0; idx < macro_commands.Count; idx++) {
 		    toast_messages.Add(new GUIContent($"Keybind: {macro_commands[idx].keybind}"));
@@ -359,7 +474,7 @@ public class DevConsole : MonoBehaviour
 	    }
     }
 
-    [DevCommand]
+    [DevCommand(false)]
     void clear() {
         toast_messages.Clear();
     }
@@ -398,7 +513,7 @@ public class DevConsole : MonoBehaviour
     void OnGUI() {
         Event input_event = Event.current;
         if (is_console_open == false) {
-            KeyCode[] open_console_keys = Style != null ? Style.openConsoleKey : Array.Empty<KeyCode>();
+            KeyCode[] open_console_keys = Style != null ? Style.open_console_key : Array.Empty<KeyCode>();
             if (input_event.open_console(overrideKeys:open_console_keys)) {
                 console_open();
             }
@@ -511,12 +626,13 @@ public class DevConsole : MonoBehaviour
     void draw_console_window(Event input_event) {
 	    float width = Screen.width;
 	    float height = Screen.height;
-	    Style.ConsoleSkin.label.fontSize = (int)(Style.console_text_size - HEIGHT_SPACING);
-	    Style.ConsoleSkin.textField.fontSize = (int)(Style.console_text_size - HEIGHT_SPACING);
-	    GUI.skin = Style.ConsoleSkin;
+	    Style.console_skin.label.fontSize = (int)(Style.console_text_size - HEIGHT_SPACING);
+	    Style.console_skin.textField.fontSize = (int)(Style.console_text_size - HEIGHT_SPACING);
+	    GUI.skin = Style.console_skin;
 
-	    selectionBump = Mathf.Lerp(selectionBump, 1, Style.SelectHintBumpSpeed * Time.unscaledDeltaTime);
-	    argumentHintBump = Mathf.Lerp(argumentHintBump, 1, Style.ArgHelpBumpSpeed * Time.unscaledDeltaTime);
+
+	    selection_bump = Mathf.Lerp(selection_bump, 1, Style.select_hint_bump_speed * Time.unscaledDeltaTime);
+	    argument_hint_bump = Mathf.Lerp(argument_hint_bump, 1, Style.arg_help_bump_speed * Time.unscaledDeltaTime);
 	    
 	    
 	    
@@ -577,12 +693,12 @@ public class DevConsole : MonoBehaviour
 			    bool execute_cmd_pressed = input_event.execute_command(false);
 			    if (execute_cmd_pressed && selected_hint_idx == -1 && selected_command_idx != -1 && parse_arg_result.valid_args >= dev_commands[selected_command_idx].num_args_required) {
 				    input_event.Use();
+				    int executed_command_idx = selected_command_idx; 
 				    execute_command();
-				    parse_arg_result.reset();
-				    selected_command_idx = -1;
-				    selected_hint_idx = -1;
-				    console_input_text = string.Empty;
-				    console_state = console_input_state.waiting_for_input;
+				    reset_console_state();
+				    if (macro_active.is_creating_macro == false && dev_commands[executed_command_idx].close_after_use) {
+					    console_close();
+				    }
 				    return;
 			    }
 			    
@@ -691,7 +807,7 @@ public class DevConsole : MonoBehaviour
 	    
 	    
 	    // input type guide
-	    float input_text_width = Style.ConsoleSkin.textField.CalcSize(input_content).x;
+	    float input_text_width = Style.console_skin.textField.CalcSize(input_content).x;
 	    Rect input_type_guide = new Rect(input_field_rect);
 	    input_type_guide.x += input_text_width + 2;
 	    input_type_guide.width -= input_text_width + 2;
@@ -799,7 +915,7 @@ public class DevConsole : MonoBehaviour
 		    return result;
 	    }
 	    
-	    Vector2 size = Style.ConsoleSkin.box.CalcSize(debug);
+	    Vector2 size = Style.console_skin.box.CalcSize(debug);
 	    GUI.Box(new Rect(Screen.width - size.x - WIDTH_SPACING, HEIGHT_SPACING, size.x,size.y + HEIGHT_SPACING), debug);
 #endif
 
@@ -811,7 +927,7 @@ public class DevConsole : MonoBehaviour
 	    
 	    float maximum_width = input_field_background_rect.width + horizontal_padding * 2;
 	    float max_hint_height = input_field_background_rect.y - vertical_padding - HEIGHT_SPACING * 2;
-	    float height_per_line = Style.ConsoleSkin.label.CalcSize(toast_messages[0]).y;
+	    float height_per_line = Style.console_skin.label.CalcSize(toast_messages[0]).y;
 	    int messages_to_draw = Mathf.Clamp(Mathf.RoundToInt(max_hint_height / height_per_line), 1, toast_messages.Count);
 	    float maximum_height = messages_to_draw * height_per_line;
 
@@ -838,32 +954,47 @@ public class DevConsole : MonoBehaviour
     }
     
     void draw_hints() {
-	    float maximum_width = 0;
+	    float largest_hint_width = 0;
 	    float width_offset = 0;
 	    float spacing_from_input_rect = 2;
 	    float vertical_padding = 2;
 	    
 	    float max_hint_height = input_field_background_rect.y - vertical_padding - HEIGHT_SPACING * 2 - spacing_from_input_rect;
-	    hint_height_per_line = Style.ConsoleSkin.label.CalcSize(hint_content[0]).y;
+	    hint_height_per_line = Style.console_skin.label.CalcSize(hint_content[0]).y;
 	    num_hints_on_screen = Mathf.Clamp(Mathf.RoundToInt(max_hint_height / hint_height_per_line), 1, parse_arg_result.num_hints);
 	    float maximum_height = num_hints_on_screen * hint_height_per_line;
 
-	    if (selected_hint_idx < display_hint_start_idx) {
-		    display_hint_start_idx = selected_hint_idx;
+	    // handle selection when scrolling
+	    if (current_device == device.mouse) {
+		    Event input_event = Event.current;
+		    int scroll_dir = input_event.mouse_scroll();
+			display_hint_start_idx += scroll_dir;
+		    
+		    
+			display_hint_start_idx = Mathf.Clamp(display_hint_start_idx, 0, Mathf.Max(parse_arg_result.num_hints - num_hints_on_screen, 0));
+		    if (selected_hint_idx != -1) {
+			    selected_hint_idx = Mathf.Clamp(selected_hint_idx, display_hint_start_idx, display_hint_start_idx + num_hints_on_screen - 1);
+		    }
 	    }
-	    else if (selected_hint_idx >= display_hint_start_idx + num_hints_on_screen) {
-		    display_hint_start_idx = selected_hint_idx - num_hints_on_screen + 1;
+	    else {
+		    if (selected_hint_idx < display_hint_start_idx) {
+			    display_hint_start_idx = selected_hint_idx;
+		    }
+		    else if (selected_hint_idx >= display_hint_start_idx + num_hints_on_screen) {
+			    display_hint_start_idx = selected_hint_idx - num_hints_on_screen + 1;
+		    }
+			display_hint_start_idx = Mathf.Clamp(display_hint_start_idx, 0, Mathf.Max(parse_arg_result.num_hints - num_hints_on_screen, 0));
 	    }
-
-	    display_hint_start_idx = Mathf.Clamp(display_hint_start_idx, 0, Mathf.Max(parse_arg_result.num_hints - num_hints_on_screen, 0));
-
-	    // TODO this can be calculated once, lots of CalcSize is expensive
-		float width_screen_buffer = Screen.width - WIDTH_SPACING * 2f;
+	    
+	    
+	    
+	    // TODO can be calculated only when changes happen
+	    float width_screen_buffer = Screen.width - WIDTH_SPACING * 2f;
 	    for (int i = 0; i < num_hints_on_screen; i++) {
-		    Vector2 hint_text_size = Style.ConsoleSkin.label.CalcSize(hint_content[display_hint_start_idx + i]);
-		    maximum_width = Mathf.Clamp(Mathf.Max(hint_text_size.x, maximum_width), 0, width_screen_buffer);
+		    Vector2 hint_text_size = Style.console_skin.label.CalcSize(hint_content[display_hint_start_idx + i]);
+		    largest_hint_width = Mathf.Clamp(Mathf.Max(hint_text_size.x, largest_hint_width), 0, width_screen_buffer);
 	    }
-
+	    
 	    // TODO needs to handle cmd only, next_idx will be old when going from first arg -> cmd selection again
 	    // donno if i even want this 
 	    // Vector2 input_text_size = Style.ConsoleSkin.textField.CalcSize(new GUIContent(console_input_text[..parse_arg_result.next_idx]));
@@ -872,7 +1003,7 @@ public class DevConsole : MonoBehaviour
 	    hint_background_rect = new Rect(input_field_background_rect) {
 		    x = input_field_background_rect.x + width_offset,
 		    y = input_field_background_rect.y - maximum_height - spacing_from_input_rect - vertical_padding * 2,
-		    width = maximum_width,
+		    width = largest_hint_width,
 		    height = maximum_height + vertical_padding * 2,
 	    };
 
@@ -893,11 +1024,11 @@ public class DevConsole : MonoBehaviour
 	    for (int idx = 0; idx < num_hints_on_screen; idx++) {
 		    // drawing from the bottom and up so that index matches selection
 		    Vector2 pos = hint_starting_pos + new Vector2(0, maximum_height - (idx + 1) * hint_height_per_line);
-		    hint_rect[idx] = new Rect(pos.x, pos.y, maximum_width, hint_height_per_line);
+		    hint_rect[idx] = new Rect(pos.x, pos.y, largest_hint_width, hint_height_per_line);
 
 		    bool is_selected = (display_hint_start_idx + idx) == selected_hint_idx;
 		    if (is_selected) {
-			    hint_rect[idx].x += Style.SelectionBumpCurve.Evaluate(selectionBump) * Style.SelectHintBumpOffsetAmount;
+			    hint_rect[idx].x += Style.selection_bump_curve.Evaluate(selection_bump) * Style.select_hint_bump_offset_amount;
 			    GUI.contentColor = Style.color_text_selected;
 		    }
 		    else {
@@ -1421,111 +1552,7 @@ public class DevConsole : MonoBehaviour
 
 		return first_char;
 	}
-
-
-	struct dev_command {
-		public string cmd_display_name;
-		public string hint_text;
-		public int num_args;
-		public int num_args_required;
-		public string[] arg_names;
-		public Type[] arg_types;
-		public object[] arg_default_value;
-		public bool cmd_is_static;
-		public command_type cmd_type;
-		public MethodInfo method;
-		public FieldInfo field;
-		public Type target_type;
-		
-
-		public enum command_type {
-			method,
-			field,
-			action,
-			unity_event,
-		}
-
-		public void set_method(DevCommand command, MethodInfo method_info, Type found_on_type, StringBuilder builder) {
-			cmd_type = command_type.method;
-			method = method_info;
-			cmd_is_static = method.IsStatic;
-			target_type = found_on_type;
-			
-			cmd_display_name = string.IsNullOrEmpty(command.display_name) ? method.Name : command.display_name;
-			
-			
-			ParameterInfo[] args = method.GetParameters();
-			num_args = args.Length;
-			num_args_required = num_args;
-			arg_types = new Type[num_args];
-			arg_names = new string[num_args];
-			arg_default_value = new object[num_args];
-
-
-			builder.Clear();
-			builder.Append($"{cmd_display_name} ");
-			for (int i = 0; i < args.Length; i++) {
-				ParameterInfo param = args[i];
-				builder.Append($"<{param.Name}> ");
-				
-				arg_types[i] = param.ParameterType;
-				arg_names[i] = param.Name;
-				arg_default_value[i] = param.DefaultValue;
-				
-				if (param.HasDefaultValue) {
-					num_args_required--;
-				}
-			}
-
-			hint_text = builder.ToString();
-		}
-		
-		public void set_field(DevCommand command, FieldInfo field_info, Type found_on_type) {
-			cmd_type = command_type.field;
-			field = field_info;
-			cmd_is_static = field.IsStatic;
-			
-			target_type = found_on_type;
-			num_args = 1;
-			num_args_required = num_args;
-			arg_types = new Type[] { field.FieldType };
-			arg_names = new string[]{ field.Name };
-			
-			
-			cmd_display_name = string.IsNullOrEmpty(command.display_name) ? field.Name : command.display_name;
-			hint_text = $"{cmd_display_name} <{field.Name}>";
-		}
-
-		public void set_action(DevCommand command, FieldInfo field_info, Type found_on_type) {
-			cmd_type = command_type.action;
-			field = field_info;
-			cmd_is_static = field.IsStatic;
-			
-			target_type = found_on_type;
-			num_args = 0;
-			num_args_required = num_args;
-			arg_types = Type.EmptyTypes;
-			arg_names = Array.Empty<string>();
-			
-			cmd_display_name = string.IsNullOrEmpty(command.display_name) ? field.Name : command.display_name;
-			hint_text = $"{cmd_display_name}";
-		}
-		
-		public void set_unity_event(DevCommand command, FieldInfo field_info, Type found_on_type) {
-			cmd_type = command_type.unity_event;
-			field = field_info;
-			cmd_is_static = field.IsStatic;
-			
-			target_type = found_on_type;
-			num_args = 0;
-			num_args_required = num_args;
-			arg_types = Type.EmptyTypes;
-			arg_names = Array.Empty<string>();
-			
-			cmd_display_name = string.IsNullOrEmpty(command.display_name) ? field.Name : command.display_name;
-			hint_text = $"{cmd_display_name}";
-		}
-	}
+	
 	
     }
 }

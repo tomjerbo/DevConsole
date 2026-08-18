@@ -5,13 +5,25 @@ namespace Jerbo.DevConsole {
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Event)]
     public class DevCommand : Attribute {
         public readonly string display_name;
-
-        public DevCommand(string displayName) {
-            this.display_name = displayName.Replace(DevConsole.CHAR.SPACE, DevConsole.CHAR.EMPTY);
-        }
+        public readonly bool close_after_use;
         
         public DevCommand() {
             display_name = string.Empty;
+            close_after_use = true;
+        }
+
+        public DevCommand(string display_name) {
+            this.display_name = display_name.Replace(" ", string.Empty);
+            close_after_use = true;
+        }
+
+        public DevCommand(bool close_after_use) {
+            this.close_after_use = close_after_use;
+        }
+
+        public DevCommand(string display_name, bool close_after_use) {
+            this.display_name = display_name;
+            this.close_after_use = close_after_use;
         }
     }
 }

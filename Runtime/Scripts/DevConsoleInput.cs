@@ -40,6 +40,26 @@ namespace Jerbo.DevConsole {
             return false;
         }
         
+        public static int mouse_scroll(this Event e, bool useOnTrue = true) {
+            int scroll_dir = 0;
+            
+            if (e.isScrollWheel) {
+                if (e.keyCode == KeyCode.WheelUp) {
+                    scroll_dir = 1;
+                } else if (e.keyCode == KeyCode.WheelDown) {
+                    scroll_dir = -1;
+                }
+            }
+
+            if (scroll_dir != 0 && useOnTrue) {
+                e.Use();
+            }
+            
+            return scroll_dir;
+        }
+        
+        
+        
         public static bool execute_command(this Event e, bool useOnSuccess = true) {
             if (e.isKey && e.type == EventType.KeyDown) {
                 foreach (KeyCode key in EXECUTE_COMMAND) {
