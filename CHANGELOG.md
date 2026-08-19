@@ -1,3 +1,10 @@
+## [2.0.7](https://github.com/tomjerbo/DevConsole/compare/v2.0.6...v2.0.7) (2026-08-19)
+
+
+### Bug Fixes
+
+* inherited methods not being added multiple times ([3e8482e](https://github.com/tomjerbo/DevConsole/commit/3e8482e72abe62076bb048536475bec1319804cb))
+
 ## [2.0.6](https://github.com/tomjerbo/DevConsole/compare/v2.0.5...v2.0.6) (2026-08-19)
 
 
