@@ -11,65 +11,14 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b185ae0910444e47b115db3a4df3937e, type: 3}
   m_Name: Base_Dev Console Style
-  m_EditorClassIdentifier: 
-  console_skin: {fileID: 11400000, guid: bb9a9754a6da09e4f8bfc20581f9577e, type: 2}
+  m_EditorClassIdentifier: Jerbo.DevConsole::Jerbo.DevConsole.DevConsoleStyle
+  console_skin: {fileID: 0}
   open_console_key: 74000000
-  color_background: {r: 0.25619048, g: 0.3, b: 0.18, a: 1}
+  color_background: {r: 0.2561905, g: 0.3, b: 0.18, a: 1}
   color_text_default: {r: 0.5660378, g: 0.5660378, b: 0.5660378, a: 1}
-  color_text_selected: {r: 1, g: 0.85882354, b: 0.33333334, a: 1}
+  color_text_selected: {r: 1, g: 0.8588235, b: 0.3333333, a: 1}
   color_text_valid_cmd: {r: 1, g: 1, b: 1, a: 1}
-  color_outline_macro: {r: 0.5294118, g: 0.8078432, b: 0.9803922, a: 1}
-  console_text_size: 26
+  color_outline_macro: {r: 1, g: 0.3, b: 0, a: 1}
+  console_text_size: 36
   select_hint_bump_offset_amount: 6
-  select_hint_bump_speed: 12
-  arg_help_bump_offset_amount: -6
-  arg_help_bump_speed: 8
-  arg_help_width_padding: 8
-  selection_bump_curve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 2.8162029
-      outSlope: 2.8162029
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.106527776
-    - serializedVersion: 3
-      time: 0.5
-      value: 0.65
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 0
-    m_RotationOrder: 4
-  argument_type_bump_curve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 2.8162029
-      outSlope: 2.8162029
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.106527776
-    - serializedVersion: 3
-      time: 0.5
-      value: 0.65
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 0
-    m_RotationOrder: 4
+  select_hint_bump_speed: 24
