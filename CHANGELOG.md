@@ -1,3 +1,10 @@
+## [2.0.4](https://github.com/tomjerbo/DevConsole/compare/v2.0.3...v2.0.4) (2026-08-19)
+
+
+### Bug Fixes
+
+* keycode for scrolling doesnt exist in pre-6.0~ version of unity ([de680b7](https://github.com/tomjerbo/DevConsole/commit/de680b785be60a288e114ee7dcb635bb476fa4a7))
+
 ## [2.0.3](https://github.com/tomjerbo/DevConsole/compare/v2.0.2...v2.0.3) (2026-08-18)
 
 
