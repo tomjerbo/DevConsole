@@ -116,7 +116,7 @@ public class DevConsole : MonoBehaviour
     
     // TODO animations
     float selection_bump;
-    float argument_hint_bump;
+    // float argument_hint_bump;
     
     GUIStyle box_border_skin() => Style.console_skin.customStyles[0];
     
@@ -632,7 +632,7 @@ public class DevConsole : MonoBehaviour
 
 
 	    selection_bump = Mathf.Lerp(selection_bump, 1, Style.select_hint_bump_speed * Time.unscaledDeltaTime);
-	    argument_hint_bump = Mathf.Lerp(argument_hint_bump, 1, Style.arg_help_bump_speed * Time.unscaledDeltaTime);
+	    // argument_hint_bump = Mathf.Lerp(argument_hint_bump, 1, Style.arg_help_bump_speed * Time.unscaledDeltaTime);
 	    
 	    
 	    
@@ -673,6 +673,7 @@ public class DevConsole : MonoBehaviour
 						    selected_hint_idx = -1;
 				    	}
 				    }
+					selection_bump = 0;
 				    input_event.Use();
 				    return;
 			    }
@@ -683,7 +684,7 @@ public class DevConsole : MonoBehaviour
 						    selected_hint_idx = parse_arg_result.num_hints - 1;
 				    	}
 				    }
-
+					selection_bump = 0;
 				    input_event.Use();
 				    return;
 			    }
@@ -973,7 +974,11 @@ public class DevConsole : MonoBehaviour
 		    
 			display_hint_start_idx = Mathf.Clamp(display_hint_start_idx, 0, Mathf.Max(parse_arg_result.num_hints - num_hints_on_screen, 0));
 		    if (selected_hint_idx != -1) {
-			    selected_hint_idx = Mathf.Clamp(selected_hint_idx, display_hint_start_idx, display_hint_start_idx + num_hints_on_screen - 1);
+			    int clamped_hint_idx = Mathf.Clamp(selected_hint_idx, display_hint_start_idx, display_hint_start_idx + num_hints_on_screen - 1);
+			    if (selected_hint_idx != clamped_hint_idx) {
+			    	selected_hint_idx = clamped_hint_idx;
+					selection_bump = 0;
+			    }
 		    }
 	    }
 	    else {
@@ -1017,7 +1022,11 @@ public class DevConsole : MonoBehaviour
 		    float mouse_y = mouse_pos.y - hint_background_rect.y;
 		    int hovered_hint = Mathf.FloorToInt(mouse_y / hint_height_per_line);
 		    hovered_hint = Mathf.Clamp(hovered_hint, 0, num_hints_on_screen - 1);
-		    selected_hint_idx = display_hint_start_idx + (num_hints_on_screen - 1) - hovered_hint;
+		    hovered_hint = display_hint_start_idx + (num_hints_on_screen - 1) - hovered_hint;
+		    if (hovered_hint != selected_hint_idx) {
+			    selection_bump = 0;
+				selected_hint_idx = hovered_hint;
+		    }
 	    }
 	    
 
@@ -1028,7 +1037,7 @@ public class DevConsole : MonoBehaviour
 
 		    bool is_selected = (display_hint_start_idx + idx) == selected_hint_idx;
 		    if (is_selected) {
-			    hint_rect[idx].x += Style.selection_bump_curve.Evaluate(selection_bump) * Style.select_hint_bump_offset_amount;
+			    hint_rect[idx].x += (selection_bump * selection_bump) * Style.select_hint_bump_offset_amount;
 			    GUI.contentColor = Style.color_text_selected;
 		    }
 		    else {
