@@ -1,3 +1,10 @@
+## [2.0.5](https://github.com/tomjerbo/DevConsole/compare/v2.0.4...v2.0.5) (2026-08-19)
+
+
+### Bug Fixes
+
+* removed animationcurves so i can more easily create assets when importing package ([1100054](https://github.com/tomjerbo/DevConsole/commit/1100054e5ec10e84d9a13760a464ec1bbfea51a8))
+
 ## [2.0.4](https://github.com/tomjerbo/DevConsole/compare/v2.0.3...v2.0.4) (2026-08-19)
 
 
