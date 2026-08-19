@@ -1,3 +1,10 @@
+## [2.0.6](https://github.com/tomjerbo/DevConsole/compare/v2.0.5...v2.0.6) (2026-08-19)
+
+
+### Bug Fixes
+
+* setting default values to avoid having to copy the asset from packages ([591bd6b](https://github.com/tomjerbo/DevConsole/commit/591bd6b62584fcdb0364eaabb73d268cbb031cdf))
+
 ## [2.0.5](https://github.com/tomjerbo/DevConsole/compare/v2.0.4...v2.0.5) (2026-08-19)
 
 
