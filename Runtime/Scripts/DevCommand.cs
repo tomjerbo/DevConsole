@@ -22,7 +22,7 @@ namespace Jerbo.DevConsole {
         }
 
         public DevCommand(string display_name, bool close_after_use) {
-            this.display_name = display_name;
+            this.display_name = display_name.Replace(" ", string.Empty);
             this.close_after_use = close_after_use;
         }
     }
