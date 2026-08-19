@@ -1,5 +1,5 @@
 #define URP_ENABLED
-#define DEVCONSOLE_DEBUG
+//#define DEVCONSOLE_DEBUG
 
 using System;
 using System.Collections.Generic;
@@ -559,69 +559,92 @@ public class DevConsole : MonoBehaviour
 	    console_state = console_input_state.waiting_for_input;
 	    current_device = device.keyboard;
     }
-	
-	Task load_dev_commands() {
-	     Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-	     foreach (Assembly assembly in assemblies) {
-		     if (assembly.FullName.StartsWith("Assembly-CSharp", StringComparison.OrdinalIgnoreCase) ||
-		         assembly.FullName.StartsWith("Jerbo", StringComparison.OrdinalIgnoreCase)) {
-			     Type[] assembly_types = assembly.GetTypes();
-			     foreach (Type loaded_type in assembly_types) {
-				     
-				     MethodInfo[] methods_in_type = loaded_type.GetMethods(DEV_COMMAND_BINDING_FLAGS);
-				     foreach (MethodInfo method_info in methods_in_type) {
-					     DevCommand cmd = method_info.GetCustomAttribute<DevCommand>();
-					     if (cmd != null) {
-						     dev_commands[num_commands++].set_method(cmd, method_info, loaded_type, text_builder);
-					     }
-				     }
+
+    Task load_dev_commands() {
+	    Dictionary<string, (MethodInfo, int)> found_methods = new (256);
+	    Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+	    foreach (Assembly assembly in assemblies) {
+		    if (assembly.FullName.StartsWith("Assembly-CSharp", StringComparison.OrdinalIgnoreCase) || assembly.FullName.StartsWith("Jerbo", StringComparison.OrdinalIgnoreCase)) {
+			    Type[] assembly_types = assembly.GetTypes();
+			    foreach (Type loaded_type in assembly_types) {
+				    MethodInfo[] methods_in_type = loaded_type.GetMethods(DEV_COMMAND_BINDING_FLAGS);
+				    foreach (MethodInfo method_info in methods_in_type) {
+					    DevCommand cmd = method_info.GetCustomAttribute<DevCommand>();
+					    if (cmd == null) {
+						    continue;
+					    }
+
+					    string cmd_name = string.IsNullOrEmpty(cmd.display_name) ? method_info.Name : cmd.display_name;
+
+					    if (found_methods.ContainsKey(cmd_name) == false) {
+						    found_methods.Add(cmd_name, (method_info, num_commands));
+						    dev_commands[num_commands++].set_method(cmd, method_info, loaded_type, text_builder);
+					    }
+					    else {
+						    (MethodInfo method_info, int cmd_idx) dupe_found = found_methods[cmd_name];
+						    MethodInfo saved_base_method = dupe_found.method_info.GetBaseDefinition();
+						    MethodInfo current_base_method = method_info.GetBaseDefinition();
+
+						    if (saved_base_method == current_base_method) {
+							    found_methods[cmd_name] = (saved_base_method, dupe_found.cmd_idx);
+							    dev_commands[dupe_found.cmd_idx].set_method(cmd, saved_base_method, saved_base_method.DeclaringType, text_builder);
+						    }
+						    else {
+							    Debug.LogError($"Duplicate DevCommand name: {cmd_name} -> {dupe_found.method_info.DeclaringType}.{dupe_found.method_info.Name} & {method_info.DeclaringType}.{method_info.Name}");
+						    }
+					    }
+				    }
 
 
-				     FieldInfo[] fields_in_type = loaded_type.GetFields(DEV_COMMAND_BINDING_FLAGS);
-				     foreach (FieldInfo field_info in fields_in_type) {
-					     DevCommand cmd = field_info.GetCustomAttribute<DevCommand>();
-					     if (cmd != null) {
-						     if (field_info.FieldType == typeof(Action)) {
-							     dev_commands[num_commands++].set_action(cmd, field_info, loaded_type);
-						     }
-						     else if (field_info.FieldType == typeof(UnityEvent)) {
-							     dev_commands[num_commands++].set_unity_event(cmd, field_info, loaded_type);
-						     }
-						     else {
-							     dev_commands[num_commands++].set_field(cmd, field_info, loaded_type);
-						     }
-					     }
-				     }
-				     
-				     
-				     PropertyInfo[] properties_in_type = loaded_type.GetProperties(DEV_COMMAND_BINDING_FLAGS);
-				     foreach (PropertyInfo prop_info in properties_in_type) {
-					     DevCommand cmd = prop_info.GetCustomAttribute<DevCommand>();
-					     if (cmd != null) { 
-						     dev_commands[num_commands++].set_method(cmd, prop_info.SetMethod, loaded_type, text_builder);
-					     }
-				     }
-				     
-				     // TODO fix events
-				     // EventInfo[] events_in_type = loaded_type.GetEvents(DEV_COMMAND_BINDING_FLAGS);
-				     // foreach (EventInfo event_info in events_in_type) {
-					    //  DevCommand cmd = event_info.GetCustomAttribute<DevCommand>();
-					    //  if (cmd != null) { 
-						   //   dev_commands[active_cmd_count++].set_method(cmd, event_info.RaiseMethod, loaded_type);
-					    //  }
-				     // }
-			     }
+				    FieldInfo[] fields_in_type = loaded_type.GetFields(DEV_COMMAND_BINDING_FLAGS);
+				    foreach (FieldInfo field_info in fields_in_type) {
+					    DevCommand cmd = field_info.GetCustomAttribute<DevCommand>();
+					    if (cmd == null) {
+						    continue;
+					    }
+					    
+					    if (field_info.FieldType == typeof(Action)) {
+						    dev_commands[num_commands++].set_action(cmd, field_info, loaded_type);
+					    }
+					    else if (field_info.FieldType == typeof(UnityEvent)) {
+						    dev_commands[num_commands++].set_unity_event(cmd, field_info, loaded_type);
+					    }
+					    else {
+						    dev_commands[num_commands++].set_field(cmd, field_info, loaded_type);
+					    }
+				    }
 
-			     // Log($"--- <Assembly Commands ({assembly.GetName().Name}) : {active_cmd_count} > ---");
-			     // for (int i = 0; i < active_cmd_count; i++) {
-			     //  Log($"CMD: {dev_commands[i].cmd_display_name}");
-			     // }
-			     // Log($"--- </Assembly Commands ({assembly.GetName().Name}) > ---");
-		     }
-	     }
 
-	     return Task.CompletedTask;
-	}
+				    PropertyInfo[] properties_in_type = loaded_type.GetProperties(DEV_COMMAND_BINDING_FLAGS);
+				    foreach (PropertyInfo prop_info in properties_in_type) {
+					    DevCommand cmd = prop_info.GetCustomAttribute<DevCommand>();
+					    if (cmd == null) {
+						    continue;
+					    }
+					    
+					    dev_commands[num_commands++].set_method(cmd, prop_info.SetMethod, loaded_type, text_builder);
+				    }
+
+				    // TODO fix events
+				    // EventInfo[] events_in_type = loaded_type.GetEvents(DEV_COMMAND_BINDING_FLAGS);
+				    // foreach (EventInfo event_info in events_in_type) {
+				    //  DevCommand cmd = event_info.GetCustomAttribute<DevCommand>();
+				    //  if (cmd != null) { 
+				    //   dev_commands[active_cmd_count++].set_method(cmd, event_info.RaiseMethod, loaded_type);
+				    //  }
+				    // }
+			    }
+
+			    // Log($"--- <Assembly Commands ({assembly.GetName().Name}) : {active_cmd_count} > ---");
+			    // for (int i = 0; i < active_cmd_count; i++) {
+			    //  Log($"CMD: {dev_commands[i].cmd_display_name}");
+			    // }
+			    // Log($"--- </Assembly Commands ({assembly.GetName().Name}) > ---");
+		    }
+	    }
+
+	    return Task.CompletedTask;
+    }
 	
     void draw_console_window(Event input_event) {
 	    float width = Screen.width;
