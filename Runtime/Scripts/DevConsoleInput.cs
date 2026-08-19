@@ -43,11 +43,13 @@ namespace Jerbo.DevConsole {
         public static int mouse_scroll(this Event e, bool useOnTrue = true) {
             int scroll_dir = 0;
             
-            if (e.isScrollWheel) {
-                if (e.keyCode == KeyCode.WheelUp) {
-                    scroll_dir = 1;
-                } else if (e.keyCode == KeyCode.WheelDown) {
+            // Keycode.WheelUp/Down does not exist in earlier versions of unity!
+            if (e.type == EventType.ScrollWheel) {
+                if (e.delta.y > float.Epsilon) {
                     scroll_dir = -1;
+                }
+                else if (e.delta.y < -float.Epsilon) {
+                    scroll_dir = 1;
                 }
             }
 
